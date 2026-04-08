@@ -1,0 +1,51 @@
+# ============================================================
+# BEFORE (KuboCD): no explicit chart source objects needed.
+#   Each Release CR's package.source.oci points directly to the chart:
+#   e.g.: oci://quay.io/okdp/charts/spark-history-server:1.0.0
+#   KuboCD's controller pulls the OCI artifact, extracts the chart,
+#   and serves it internally over an ephemeral per-Release HTTP server.
+#   Result: N Releases = N internal HTTP servers running in the cluster.
+#
+# AFTER (pure Flux): one shared HelmRepository pointing to the registry
+#   base URL. All HelmReleases share a single source object and each
+#   specifies chart name + version independently.
+#   Zero extra controllers or in-cluster HTTP servers.
+#
+# CHART FORMAT NOTE:
+#   The OKDP charts at quay.io/okdp/charts use the standard Helm OCI
+#   media type (application/vnd.cncf.helm.chart.content.v1.tar+gzip).
+#   HelmRepository type:oci is the recommended modern Flux approach.
+#
+# ALTERNATIVE (if HelmRepository type:oci fails on your registry):
+#   Use one OCIRepository per chart (as in migration-flux-pure/sources/):
+#
+#   apiVersion: source.toolkit.fluxcd.io/v1
+#   kind: OCIRepository
+#   metadata:
+#     name: spark-history-server
+#     namespace: flux-system
+#   spec:
+#     interval: 30m
+#     url: oci://quay.io/okdp/charts/spark-history-server
+#     ref:
+#       tag: "1.0.0"
+#     layerSelector:
+#       mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+#       operation: copy
+#
+#   Then in HelmRelease use:
+#     chartRef:
+#       kind: OCIRepository
+#       name: spark-history-server
+#       namespace: flux-system
+#   (instead of chart.spec.sourceRef)
+# ============================================================
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: okdp-oci-charts
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 10m
+  url: oci://quay.io/okdp/charts

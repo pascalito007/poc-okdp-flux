@@ -1,0 +1,94 @@
+# ============================================================
+# Bootstrap: apply these two files once, Flux handles the rest.
+#
+#   kubectl apply -f poc/gitrepository.yaml
+#   kubectl apply -f poc/kustomization-root.yaml
+#
+# Reconciliation order (enforced by dependsOn):
+#
+#   poc-platform-vars  →  poc-sources  →  poc-spark-history-server
+#                                      →  poc-hive-metastore
+#
+# Scoped to ./poc — does not touch KuboCD-managed resources
+# under clusters/sandbox/releases/.
+# ============================================================
+
+# 1. Platform vars — the shared ConfigMap must exist before any
+#    postBuild.substituteFrom can resolve ${VAR} references.
+#    No substituteFrom here: this IS the source of the vars.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: poc-platform-vars
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox-poc
+  path: ./poc
+  prune: true
+
+# 2. Sources — HelmRepository must exist before HelmReleases
+#    reference it via sourceRef.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: poc-sources
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox-poc
+  path: ./poc/sources
+  prune: true
+  dependsOn:
+    - name: poc-platform-vars
+
+# 3. Spark History Server — overlay controls proxy on/off.
+#    Change path to overlays/without-proxy to disable the proxy.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: poc-spark-history-server
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox-poc
+  path: ./poc/spark-history-server/overlays/with-proxy
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-vars
+        optional: false
+  dependsOn:
+    - name: poc-sources
+
+# 4. Hive Metastore
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: poc-hive-metastore
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox-poc
+  path: ./poc/hive-metastore
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-vars
+        optional: false
+  dependsOn:
+    - name: poc-sources

@@ -1,0 +1,129 @@
+# ============================================================
+# BEFORE (KuboCD): equivalent Release CR would be:
+#
+#   apiVersion: kubocd.kubotal.io/v1alpha1
+#   kind: Release
+#   metadata:
+#     name: hive-metastore
+#     namespace: kubocd-system
+#   spec:
+#     targetNamespace: default
+#     package:
+#       source:
+#         oci:
+#           repository: quay.io/okdp/charts/hive-metastore
+#           tag: 1.4.0
+#
+#   KuboCD evaluates the package descriptor template:
+#   - $s3ApiUrl: resolves apiUrl with .Release.namespace + .Context.ingress.suffix
+#   - $serviceName: first segment of thrift endpoint hostname
+#   - $port: port from thrift endpoint URL (splitList ":" → index 1)
+#   All these Go template operations happen at controller render time.
+#
+# AFTER (pure Flux): pre-resolved values via ${VAR} substitution.
+#   The endpoint URL parsing (splitList, trimPrefix, first) becomes
+#   static values in platform-vars. Logic disappears; values remain.
+# ============================================================
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: hive-metastore
+  namespace: flux-system
+spec:
+  interval: 30m
+  timeout: 10m
+  targetNamespace: ${TARGET_NAMESPACE}
+  install:
+    createNamespace: true
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+  chart:
+    spec:
+      # BEFORE: source.oci.repository: quay.io/okdp/charts/hive-metastore
+      #         source.oci.tag: 1.4.0
+      chart: hive-metastore
+      version: "1.4.0"
+      sourceRef:
+        kind: HelmRepository
+        name: okdp-oci-charts
+        namespace: flux-system
+  values:
+    replicaCount: 1
+
+    image:
+      repository: quay.io/okdp/hive-metastore
+      tag: "4.0.1"
+      pullPolicy: IfNotPresent
+
+    logLevel: INFO
+
+    # BEFORE: serviceName: {{ $serviceName }}
+    #   $serviceName = first element of (endpoint.url host splitList ".")
+    #   endpoint.url = "thrift://hive-metastore.{{ .Release.namespace }}.svc.cluster.local:9083"
+    #   → host = "hive-metastore.default.svc.cluster.local" → first = "hive-metastore"
+    serviceName: ${HMS_SERVICE_NAME}
+
+    db:
+      driverRef: org.postgresql.Driver
+      driverName: postgresql
+      # BEFORE: host: {{ .Context.hiveMetastore.database.host }}
+      host: ${HMS_DB_HOST}
+      # BEFORE: port: {{ .Context.hiveMetastore.database.port }}
+      port: ${HMS_DB_PORT}
+      # BEFORE: databaseName: {{ .Context.hiveMetastore.database.name }}
+      databaseName: ${HMS_DB_NAME}
+      user:
+        name: ~
+        password:
+          # BEFORE: secretName: {{ .Context.hiveMetastore.database.credentialsSecret.name }}
+          #         propertyName: {{ .Context.hiveMetastore.database.credentialsSecret.passwordKey }}
+          secretName: ${HMS_DB_CREDS_SECRET}
+          propertyName: password
+
+    extraEnvRaw:
+      # BEFORE: secretKeyRef.name: {{ .Context.hiveMetastore.database.credentialsSecret.name }}
+      #         key: {{ .Context.hiveMetastore.database.credentialsSecret.usernameKey }}
+      - name: HIVEMS_USER
+        valueFrom:
+          secretKeyRef:
+            name: ${HMS_DB_CREDS_SECRET}
+            key: username
+      # BEFORE: value: {{ $port | quote }}
+      #   $port = index (splitList ":" noProto) 1 → "9083"
+      - name: THRIFT_LISTENING_PORT
+        value: "${HMS_THRIFT_PORT}"
+
+    # BEFORE: cloud_storage: "{{ .Context.hiveMetastore.storage.provider }}"
+    #   (always "s3" in sandbox context)
+    cloud_storage: "s3"
+
+    s3:
+      # BEFORE: url: {{ $s3ApiUrl }}
+      #   $s3ApiUrl = .Context.hiveMetastore.storage.s3.apiUrl
+      #   with "{{ .Release.namespace }}" → "default", "{{ .Context.ingress.suffix }}" → "okdp.sandbox"
+      url: ${HMS_S3_API_URL}
+      # BEFORE: warehouseDirectory: {{ .Context.hiveMetastore.storage.s3.bucket }}
+      #   Note: chart uses warehouseDirectory as bucket name (not a path)
+      warehouseDirectory: ${HMS_S3_BUCKET}
+      accessKey:
+        # BEFORE: secretName: {{ .Context.hiveMetastore.storage.s3.credentialsSecret.name }}
+        #         propertyName: {{ .Context.hiveMetastore.storage.s3.credentialsSecret.accessKeyKey }}
+        secretName: ${HMS_S3_CREDS_SECRET}
+        propertyName: accessKey
+      secretKey:
+        secretName: ${HMS_S3_CREDS_SECRET}
+        propertyName: secretKey
+
+    gcs:
+      enabled: false
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1024Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi

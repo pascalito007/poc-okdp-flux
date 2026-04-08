@@ -1,0 +1,16 @@
+# ============================================================
+# GitRepository: tells source-controller where to find the code.
+# Scoped to OKDP/okdp-sandbox — the poc-root Kustomization
+# below restricts reconciliation to ./poc only, so this does
+# not interfere with KuboCD-managed resources under clusters/.
+# ============================================================
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: okdp-sandbox-poc
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/pascalito007/poc-okdp-flux
+  ref:
+    branch: main

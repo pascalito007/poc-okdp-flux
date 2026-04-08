@@ -1,0 +1,14 @@
+# ============================================================
+# BEFORE (KuboCD): the "proxy" module is always deployed
+#   (enableWebProxy parameter exists but conditional modules
+#    are not implemented — "# TODO: Kubocd — Add conditional modules")
+#
+# AFTER: including this file in the Kustomization path = proxy ON.
+#   Switch kustomization-flux.yaml spec.path to overlays/without-proxy
+#   to disable the proxy without touching any HelmRelease.
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base                      # includes helmrelease-main.yaml
+  - ../../base/helmrelease-proxy.yaml  # adds the proxy module

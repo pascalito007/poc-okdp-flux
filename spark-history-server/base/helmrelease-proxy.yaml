@@ -1,0 +1,93 @@
+# ============================================================
+# BEFORE (KuboCD): second module inside the same Release CR.
+#   modules:
+#     - name: proxy
+#       dependsOn: [main]
+#       source:
+#         oci:
+#           repository: quay.io/okdp/charts/spark-web-proxy
+#           tag: 0.1.0
+#       values: |
+#         ...
+#   NOTE: the package has a "# TODO: Kubocd — Add conditional modules"
+#   comment — meaning the proxy module is ALWAYS deployed regardless
+#   of the enableWebProxy parameter. This is an unimplemented feature.
+#
+# AFTER (pure Flux): a separate HelmRelease file.
+#   The conditional is resolved at the Kustomize overlay level:
+#   - overlays/with-proxy/ includes this file → proxy deployed
+#   - overlays/without-proxy/ excludes this file → proxy absent
+#   This FIXES the KuboCD TODO using standard Kustomize composition.
+#   No new Kubernetes operator or CRD needed.
+# ============================================================
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: spark-history-server-proxy
+  namespace: flux-system
+spec:
+  interval: 30m
+  timeout: 10m
+  targetNamespace: ${TARGET_NAMESPACE}
+  dependsOn:
+    # BEFORE: dependsOn: [main]  (within the same Release, KuboCD-resolved)
+    # AFTER:  explicit HelmRelease name in the same namespace
+    - name: spark-history-server-main
+      namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 5
+  upgrade:
+    remediation:
+      retries: 5
+  chart:
+    spec:
+      chart: spark-web-proxy
+      version: "0.1.0"
+      sourceRef:
+        kind: HelmRepository
+        name: okdp-oci-charts
+        namespace: flux-system
+  values:
+    image:
+      repository: quay.io/okdp/spark-web-proxy
+      pullPolicy: IfNotPresent
+      tag: "0.2.1"
+
+    configuration:
+      spark:
+        history:
+          # BEFORE: service: {{ .Release.metadata.name }}-main.{{ .Release.spec.targetNamespace }}.svc.cluster.local
+          #   → "spark-history-server-main.default.svc.cluster.local"
+          service: ${SPARK_WEB_PROXY_SERVICE_HOST}
+          port: 18080
+          scheme: http
+        ui:
+          proxyBase: /sparkui
+        jobNamespaces:
+          # BEFORE: - {{ .Release.spec.targetNamespace }}
+          - ${TARGET_NAMESPACE}
+
+    ingress:
+      enabled: true
+      className: "nginx"
+      annotations:
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+        # BEFORE: cert-manager.io/cluster-issuer: {{ .Context.certificateIssuers.selfSigned.name }}
+        cert-manager.io/cluster-issuer: ${CERT_ISSUER}
+      hosts:
+        # BEFORE: $webProxyEndpointHost = "{{ webProxyUrlPrefix }}-{{ namespace }}.{{ suffix }}"
+        #   → "spark-web-proxy-default.okdp.sandbox"
+        - host: ${SPARK_WEB_PROXY_ENDPOINT_HOST}
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - hosts:
+            - ${SPARK_WEB_PROXY_ENDPOINT_HOST}
+          # BEFORE: secretName: {{ .Release.metadata.name }}-proxy-tls → "spark-history-server-proxy-tls"
+          secretName: spark-history-server-proxy-tls
+
+    rbac:
+      create: true

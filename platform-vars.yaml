@@ -1,0 +1,88 @@
+# ============================================================
+# BEFORE (KuboCD): clusters/sandbox/default-context.yaml
+#   A single Context CR with hierarchical Go-template fields,
+#   e.g.:  apiUrl: "https://seaweedfs-seaweedfs-{{ .Release.namespace }}.{{ .Context.ingress.suffix }}"
+#   The KuboCD controller renders these at deploy time by injecting
+#   Release + Context metadata into the template engine.
+#
+# AFTER (pure Flux): this ConfigMap
+#   All values are pre-resolved for the target environment.
+#   Changing domain = edit 1 file here instead of N HelmRelease files.
+#   Referenced by every Kustomization via postBuild.substituteFrom.
+#   Variables are consumed as ${VAR} in HelmRelease specs.
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-vars
+  namespace: flux-system
+data:
+  # ── Cluster-wide ───────────────────────────────────────────
+  # KuboCD: .Context.ingress.suffix → "okdp.sandbox"
+  INGRESS_SUFFIX: "okdp.sandbox"
+  # KuboCD: .Context.certificateIssuers.selfSigned.name → "default-issuer"
+  CERT_ISSUER: "default-issuer"
+  # KuboCD: .Release.spec.targetNamespace (per-release, here always "default")
+  TARGET_NAMESPACE: "default"
+
+  # ── spark-history-server ────────────────────────────────────
+  # KuboCD: $s3ApiUrl = .Context.sparkHistory.storage.s3.apiUrl
+  #         with "{{ .Release.namespace }}" → "default"
+  #         with "{{ .Context.ingress.suffix }}" → "okdp.sandbox"
+  SPARK_HISTORY_S3_API_URL: "https://seaweedfs-seaweedfs-default.okdp.sandbox"
+
+  # KuboCD: $historyEndpointUrl = .Context.sparkHistory.endpoint.url
+  #         "https://spark-history-{{ .Release.namespace }}.{{ .Context.ingress.suffix }}"
+  #         resolved for namespace=default
+  SPARK_HISTORY_ENDPOINT_HOST: "spark-history-default.okdp.sandbox"
+  SPARK_HISTORY_ENDPOINT_URL: "https://spark-history-default.okdp.sandbox"
+
+  # KuboCD: .Context.sparkHistory.auth.oidc.issuerUri
+  #         "https://keycloak.{{ .Context.ingress.suffix }}/realms/master"
+  SPARK_HISTORY_OIDC_ISSUER_URI: "https://keycloak.okdp.sandbox/realms/master"
+  # KuboCD: .Context.sparkHistory.auth.oidc.scope
+  SPARK_HISTORY_OIDC_SCOPE: "openid+profile+email+offline_access+groups"
+
+  # KuboCD: the redirect-uri was computed conditionally:
+  #   if enableWebProxy → redirect to proxy endpoint
+  #   else              → redirect to history endpoint
+  #   In pure Flux, Go template conditionals become a single ConfigMap key.
+  #   Switch between proxy/history URL when changing the proxy overlay.
+  SPARK_HISTORY_OIDC_REDIRECT_URI: "https://spark-web-proxy-default.okdp.sandbox/home"
+
+  # KuboCD: .Context.sparkHistory.storage.s3.credentialsSecret.name
+  SPARK_HISTORY_S3_CREDS_SECRET: "creds-spark-history-s3"
+  # KuboCD: .Context.sparkHistory.auth.oidc.credentialsSecret.name
+  SPARK_HISTORY_OIDC_CREDS_SECRET: "creds-oidc"
+
+  # ── spark-web-proxy ─────────────────────────────────────────
+  # KuboCD: $webProxyEndpointUrl = "https://{{ webProxyUrlPrefix }}-{{ namespace }}.{{ suffix }}"
+  #         webProxyUrlPrefix=spark-web-proxy (default parameter), namespace=default
+  SPARK_WEB_PROXY_ENDPOINT_HOST: "spark-web-proxy-default.okdp.sandbox"
+  SPARK_WEB_PROXY_ENDPOINT_URL: "https://spark-web-proxy-default.okdp.sandbox"
+  # KuboCD: "{{ .Release.metadata.name }}-main.{{ .Release.spec.targetNamespace }}.svc.cluster.local"
+  #         release name=spark-history-server → "spark-history-server-main.default.svc.cluster.local"
+  SPARK_WEB_PROXY_SERVICE_HOST: "spark-history-server-main.default.svc.cluster.local"
+
+  # ── hive-metastore ──────────────────────────────────────────
+  # KuboCD: .Context.hiveMetastore.database.host / port / name
+  HMS_DB_HOST: "postgresql-instance-rw.cnpg-system.svc.cluster.local"
+  HMS_DB_PORT: "5432"
+  HMS_DB_NAME: "hms"
+  # KuboCD: .Context.hiveMetastore.database.credentialsSecret.name
+  HMS_DB_CREDS_SECRET: "creds-hms-db"
+
+  # KuboCD: $s3ApiUrl = .Context.hiveMetastore.storage.s3.apiUrl
+  #         with namespace=default, suffix=okdp.sandbox
+  HMS_S3_API_URL: "https://seaweedfs-seaweedfs-default.okdp.sandbox"
+  # KuboCD: .Context.hiveMetastore.storage.s3.bucket
+  HMS_S3_BUCKET: "hive"
+  # KuboCD: .Context.hiveMetastore.storage.s3.credentialsSecret.name
+  HMS_S3_CREDS_SECRET: "creds-hms-s3"
+
+  # KuboCD: $serviceName = first segment of endpoint.url host
+  #         endpoint.url = "thrift://hive-metastore.{{ .Release.namespace }}.svc.cluster.local:9083"
+  #         → host = "hive-metastore.default.svc.cluster.local" → first = "hive-metastore"
+  HMS_SERVICE_NAME: "hive-metastore"
+  # KuboCD: $port = last segment of endpoint.url → "9083"
+  HMS_THRIFT_PORT: "9083"

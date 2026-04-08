@@ -1,0 +1,39 @@
+# ============================================================
+# BEFORE (KuboCD):
+#   dependencies: [database-server, storage]
+#   KuboCD resolves "database-server" role → cnpg-postgresql Release.
+#   KuboCD resolves "storage" role → seaweedfs Release.
+#
+# AFTER: explicit Kustomization resource names.
+# ============================================================
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: hive-metastore
+  namespace: flux-system
+spec:
+  interval: 10m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    # Update to your bootstrapped GitRepository name (typically "flux-system")
+    name: flux-system
+    namespace: flux-system
+  path: ./poc/hive-metastore
+  prune: true
+  wait: true
+  postBuild:
+    substituteFrom:
+      # SubstituteReference fields: kind, name, optional (no namespace field).
+      # The ConfigMap is always read from the Kustomization's own namespace (flux-system).
+      - kind: ConfigMap
+        name: platform-vars
+        optional: false
+  # BEFORE (KuboCD): dependencies: [database-server, storage]
+  # AFTER: explicit Kustomization resource names in flux-system.
+  #   These MUST match actual FluxCD Kustomization object names in your cluster.
+  #   If a referenced Kustomization does not exist, Flux blocks indefinitely.
+  #   For a standalone PoC, comment these out and deploy manually in order.
+  dependsOn:
+    - name: cnpg-postgresql  # KuboCD role: database-server → adapt to your Kustomization name
+    # - name: seaweedfs      # KuboCD role: storage → add if seaweedfs managed by Flux

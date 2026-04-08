@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Base layer: only the main release.
+# The proxy release is added by the with-proxy overlay.
+# This means overlays/without-proxy gets the base as-is (no proxy),
+# and overlays/with-proxy adds helmrelease-proxy.yaml on top.
+resources:
+  - helmrelease-main.yaml
