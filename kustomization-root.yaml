@@ -39,7 +39,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: okdp-sandbox-poc
-  path: ./spark-history-server/overlays/with-proxy
+  path: ./spark-history-server/base
   prune: true
   postBuild:
     substituteFrom:
