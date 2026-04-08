@@ -4,7 +4,7 @@
 #    are not implemented — "# TODO: Kubocd — Add conditional modules")
 #
 # AFTER: including this file in the Kustomization path = proxy ON.
-#   Switch kustomization-root.yaml spec.path to overlays/without-proxy
+#   Switch kustomization-root.yaml spec.path to ./spark-history-server/base
 #   to disable the proxy without touching any HelmRelease.
 # ============================================================
 apiVersion: kustomize.config.k8s.io/v1beta1

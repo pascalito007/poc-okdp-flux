@@ -25,7 +25,8 @@ spec:
   prune: true
 
 # 2. Spark History Server
-#    Change path to overlays/without-proxy to disable the proxy.
+#    Proxy ON:  path: ./spark-history-server/overlays/with-proxy
+#    Proxy OFF: path: ./spark-history-server/base
 #    This is the only line to edit — push to git, Flux does the rest.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
