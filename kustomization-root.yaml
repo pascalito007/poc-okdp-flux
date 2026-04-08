@@ -27,7 +27,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: okdp-sandbox-poc
-  path: ./poc
+  path: ./
   prune: true
 
 # 2. Sources — HelmRepository must exist before HelmReleases
@@ -43,7 +43,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: okdp-sandbox-poc
-  path: ./poc/sources
+  path: ./sources
   prune: true
   dependsOn:
     - name: poc-platform-vars
@@ -61,7 +61,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: okdp-sandbox-poc
-  path: ./poc/spark-history-server/overlays/with-proxy
+  path: ./spark-history-server/overlays/with-proxy
   prune: true
   postBuild:
     substituteFrom:
@@ -83,7 +83,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: okdp-sandbox-poc
-  path: ./poc/hive-metastore
+  path: ./hive-metastore
   prune: true
   postBuild:
     substituteFrom:
