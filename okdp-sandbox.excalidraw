@@ -1,0 +1,480 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+
+    {
+      "id": "repo-bg", "type": "rectangle",
+      "x": 0, "y": 0, "width": 2200, "height": 1600,
+      "strokeColor": "#495057", "backgroundColor": "#f8f9fa", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "dashed", "roughness": 0, "opacity": 30,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 1, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "repo-label", "type": "text",
+      "x": 20, "y": 10, "width": 500, "height": 28,
+      "strokeColor": "#343a40", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 2, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "okdp-sandbox — GitHub repo", "fontSize": 20, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "okdp-sandbox — GitHub repo", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cluster-bg", "type": "rectangle",
+      "x": 20, "y": 50, "width": 960, "height": 800,
+      "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0, "opacity": 40,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 3, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "cluster-label", "type": "text",
+      "x": 35, "y": 58, "width": 720, "height": 20,
+      "strokeColor": "#1864ab", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 4, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "clusters/sandbox/  \u2190 CLUSTER-SPECIFIC config (only this changes per cluster)", "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "clusters/sandbox/  \u2190 CLUSTER-SPECIFIC config (only this changes per cluster)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "flux-bg", "type": "rectangle",
+      "x": 40, "y": 90, "width": 380, "height": 140,
+      "strokeColor": "#1971c2", "backgroundColor": "#d0ebff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 5, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "flux-title", "type": "text",
+      "x": 55, "y": 98, "width": 80, "height": 20,
+      "strokeColor": "#1864ab", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 6, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "flux/", "fontSize": 14, "fontFamily": 3, "fontStyle": 1,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "flux/", "lineHeight": 1.25
+    },
+    {
+      "id": "flux-content", "type": "text",
+      "x": 55, "y": 120, "width": 355, "height": 100,
+      "strokeColor": "#1864ab", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 7, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "bootstrap.yaml         \u2190 apply ONCE: GitRepository CR\nroot-kustomization.yaml\u2190 apply ONCE: single Flux entry point\n\n\u26a1 Flux takes over after bootstrap", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "bootstrap.yaml         \u2190 apply ONCE: GitRepository CR\nroot-kustomization.yaml\u2190 apply ONCE: single Flux entry point\n\n\u26a1 Flux takes over after bootstrap", "lineHeight": 1.25
+    },
+
+    {
+      "id": "context-bg", "type": "rectangle",
+      "x": 40, "y": 250, "width": 380, "height": 230,
+      "strokeColor": "#2f9e44", "backgroundColor": "#ebfbee", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 8, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "context-title", "type": "text",
+      "x": 55, "y": 258, "width": 360, "height": 20,
+      "strokeColor": "#2b8a3e", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 9, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "context/  \u2190 replaces KuboCD Context CR", "fontSize": 14, "fontFamily": 3, "fontStyle": 1,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "context/  \u2190 replaces KuboCD Context CR", "lineHeight": 1.25
+    },
+    {
+      "id": "context-content", "type": "text",
+      "x": 55, "y": 282, "width": 360, "height": 188,
+      "strokeColor": "#2b8a3e", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 10, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "kustomization.yaml\ncluster-vars.yaml    \ud83c\udf10 ingress suffix, cert-issuer,\n                        storage class\nstorage-vars.yaml    \ud83d\uddc4 S3 URLs, bucket names,\n                        creds secret names\nidentity-vars.yaml   \ud83d\udd10 OIDC issuer, client secret names\ndatabase-vars.yaml   \ud83d\udc18 DB host, port, secret names\nnamespace-default.yaml  per-namespace overrides", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "kustomization.yaml\ncluster-vars.yaml    \ud83c\udf10 ingress suffix, cert-issuer,\n                        storage class\nstorage-vars.yaml    \ud83d\uddc4 S3 URLs, bucket names,\n                        creds secret names\nidentity-vars.yaml   \ud83d\udd10 OIDC issuer, client secret names\ndatabase-vars.yaml   \ud83d\udc18 DB host, port, secret names\nnamespace-default.yaml  per-namespace overrides", "lineHeight": 1.25
+    },
+
+    {
+      "id": "roles-bg", "type": "rectangle",
+      "x": 450, "y": 90, "width": 510, "height": 600,
+      "strokeColor": "#e67700", "backgroundColor": "#fff9db", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 11, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "roles-title", "type": "text",
+      "x": 465, "y": 98, "width": 490, "height": 20,
+      "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 12, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "roles/  \u2190 THE KEY: role-as-Kustomization", "fontSize": 14, "fontFamily": 3, "fontStyle": 1,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "roles/  \u2190 THE KEY: role-as-Kustomization", "lineHeight": 1.25
+    },
+    {
+      "id": "roles-subtitle", "type": "text",
+      "x": 465, "y": 118, "width": 490, "height": 40,
+      "strokeColor": "#b35900", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 13, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "Answers \"which service = which role ON THIS CLUSTER\"\nChange only here to swap SeaweedFS \u2192 MinIO on another cluster", "fontSize": 11, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "Answers \"which service = which role ON THIS CLUSTER\"\nChange only here to swap SeaweedFS \u2192 MinIO on another cluster", "lineHeight": 1.25
+    },
+    {
+      "id": "roles-content", "type": "text",
+      "x": 465, "y": 165, "width": 490, "height": 510,
+      "strokeColor": "#664d00", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 14, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "kustomization.yaml\n\nrole-ingress.yaml\n  name: role-ingress, path: infra/ingress-nginx\n\nrole-external-secrets.yaml\n  name: role-external-secrets, path: infra/local-secrets-provider\n\nrole-pg-operator.yaml\n  name: role-pg-operator, path: infra/cloudnative-pg\n\nrole-tools.yaml\n  name: role-tools, path: infra/tools\n\nrole-database-server.yaml\n  name: role-database-server, path: infra/cnpg-postgresql\n\nrole-storage.yaml\n  name: role-storage, path: infra/seaweedfs\n  \u2699 swap path per cluster for portability\n\nrole-identity.yaml\n  name: role-identity, path: infra/keycloak\n\nrole-spark-operator.yaml\n  name: role-spark-operator, path: infra/spark-operator\n\nrole-data-catalog.yaml\n  name: role-data-catalog, path: apps/hive-metastore", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "kustomization.yaml\n\nrole-ingress.yaml\n  name: role-ingress, path: infra/ingress-nginx\n\nrole-external-secrets.yaml\n  name: role-external-secrets, path: infra/local-secrets-provider\n\nrole-pg-operator.yaml\n  name: role-pg-operator, path: infra/cloudnative-pg\n\nrole-tools.yaml\n  name: role-tools, path: infra/tools\n\nrole-database-server.yaml\n  name: role-database-server, path: infra/cnpg-postgresql\n\nrole-storage.yaml\n  name: role-storage, path: infra/seaweedfs\n  \u2699 swap path per cluster for portability\n\nrole-identity.yaml\n  name: role-identity, path: infra/keycloak\n\nrole-spark-operator.yaml\n  name: role-spark-operator, path: infra/spark-operator\n\nrole-data-catalog.yaml\n  name: role-data-catalog, path: apps/hive-metastore", "lineHeight": 1.25
+    },
+
+    {
+      "id": "infra-bg", "type": "rectangle",
+      "x": 20, "y": 900, "width": 2160, "height": 290,
+      "strokeColor": "#6741d9", "backgroundColor": "#f3f0ff", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0, "opacity": 40,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 15, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "infra-label", "type": "text",
+      "x": 35, "y": 908, "width": 1000, "height": 20,
+      "strokeColor": "#5f3dc4", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 16, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "infra/  \u2190 LAYER 1: infrastructure HelmReleases  (shared across clusters \u2014 cluster-specific values injected via substituteFrom)", "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "infra/  \u2190 LAYER 1: infrastructure HelmReleases  (shared across clusters \u2014 cluster-specific values injected via substituteFrom)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "sources-bg", "type": "rectangle",
+      "x": 40, "y": 940, "width": 230, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 17, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "sources-text", "type": "text",
+      "x": 55, "y": 948, "width": 205, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 18, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "sources/\n  kustomization.yaml\n  okdp-oci-charts.yaml\n    \u2190 oci://quay.io/okdp/charts\n  cert-manager.yaml\n  ingress-nginx.yaml\n  seaweedfs.yaml", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "sources/\n  kustomization.yaml\n  okdp-oci-charts.yaml\n    \u2190 oci://quay.io/okdp/charts\n  cert-manager.yaml\n  ingress-nginx.yaml\n  seaweedfs.yaml", "lineHeight": 1.25
+    },
+
+    {
+      "id": "certmgr-bg", "type": "rectangle",
+      "x": 290, "y": 940, "width": 240, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 19, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "certmgr-text", "type": "text",
+      "x": 305, "y": 948, "width": 215, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 20, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "cert-manager/\n  kustomization.yaml\n  helmrelease.yaml\n  cluster-issuer.yaml\n\u2190 replaces KuboCD Release cert-manager\n\u2190 CRD resource dep on cert-manager HR", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "cert-manager/\n  kustomization.yaml\n  helmrelease.yaml\n  cluster-issuer.yaml\n\u2190 replaces KuboCD Release cert-manager\n\u2190 CRD resource dep on cert-manager HR", "lineHeight": 1.25
+    },
+
+    {
+      "id": "nginx-bg", "type": "rectangle",
+      "x": 550, "y": 940, "width": 240, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 21, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "nginx-text", "type": "text",
+      "x": 565, "y": 948, "width": 210, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 22, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "ingress-nginx/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-ingress", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "ingress-nginx/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-ingress", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cnpgop-bg", "type": "rectangle",
+      "x": 810, "y": 940, "width": 240, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 23, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "cnpgop-text", "type": "text",
+      "x": 825, "y": 948, "width": 210, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 24, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "cloudnative-pg/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-pg-operator\n  (CNPG operator)", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "cloudnative-pg/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-pg-operator\n  (CNPG operator)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cnpgpg-bg", "type": "rectangle",
+      "x": 1070, "y": 940, "width": 270, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 25, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "cnpgpg-text", "type": "text",
+      "x": 1085, "y": 948, "width": 245, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 26, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "cnpg-postgresql/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-database-server\n\u2190 dependsOn: role-pg-operator,\n             role-external-secrets", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "cnpg-postgresql/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-database-server\n\u2190 dependsOn: role-pg-operator,\n             role-external-secrets", "lineHeight": 1.25
+    },
+
+    {
+      "id": "secrets-bg", "type": "rectangle",
+      "x": 1360, "y": 940, "width": 240, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 27, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "secrets-text", "type": "text",
+      "x": 1375, "y": 948, "width": 210, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 28, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "local-secrets-provider/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides:\n  role-external-secrets", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "local-secrets-provider/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides:\n  role-external-secrets", "lineHeight": 1.25
+    },
+
+    {
+      "id": "keycloak-bg", "type": "rectangle",
+      "x": 1620, "y": 940, "width": 260, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 29, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "keycloak-text", "type": "text",
+      "x": 1635, "y": 948, "width": 230, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 30, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "keycloak/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-identity\n\u2190 dependsOn: role-database-server,\n             role-ingress", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "keycloak/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-identity\n\u2190 dependsOn: role-database-server,\n             role-ingress", "lineHeight": 1.25
+    },
+
+    {
+      "id": "seaweed-bg", "type": "rectangle",
+      "x": 1900, "y": 940, "width": 270, "height": 120,
+      "strokeColor": "#6741d9", "backgroundColor": "#e5dbff", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 31, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "seaweed-text", "type": "text",
+      "x": 1915, "y": 948, "width": 240, "height": 105,
+      "strokeColor": "#3b1f8c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 32, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "seaweedfs/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-storage (sandbox)\n\u2190 dependsOn: role-ingress\n(swap \u2192 infra/minio/ on other cluster)", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "seaweedfs/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 provides: role-storage (sandbox)\n\u2190 dependsOn: role-ingress\n(swap \u2192 infra/minio/ on other cluster)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "apps-bg", "type": "rectangle",
+      "x": 20, "y": 1250, "width": 2160, "height": 360,
+      "strokeColor": "#c2255c", "backgroundColor": "#fff0f6", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0, "opacity": 40,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 33, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "apps-label", "type": "text",
+      "x": 35, "y": 1258, "width": 1000, "height": 20,
+      "strokeColor": "#a61e4d", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 34, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "apps/  \u2190 LAYER 3: application HelmReleases  (dependsOn ROLE NAMES only \u2014 never concrete service names)", "fontSize": 13, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "apps/  \u2190 LAYER 3: application HelmReleases  (dependsOn ROLE NAMES only \u2014 never concrete service names)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "hivemeta-bg", "type": "rectangle",
+      "x": 40, "y": 1290, "width": 290, "height": 145,
+      "strokeColor": "#c2255c", "backgroundColor": "#ffdeeb", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 35, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "hivemeta-text", "type": "text",
+      "x": 55, "y": 1298, "width": 260, "height": 128,
+      "strokeColor": "#7d1535", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 36, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "hive-metastore/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-database-server,\n   role-storage]", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "hive-metastore/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-database-server,\n   role-storage]", "lineHeight": 1.25
+    },
+
+    {
+      "id": "sparkhist-bg", "type": "rectangle",
+      "x": 360, "y": 1290, "width": 360, "height": 200,
+      "strokeColor": "#c2255c", "backgroundColor": "#ffdeeb", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 37, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "sparkhist-text", "type": "text",
+      "x": 375, "y": 1298, "width": 330, "height": 185,
+      "strokeColor": "#7d1535", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 38, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "spark-history-server/\n  base/\n    kustomization.yaml\n    helmrelease-main.yaml\n    helmrelease-proxy.yaml\n  overlays/\n    with-proxy/\n      kustomization.yaml\n    without-proxy/\n      kustomization.yaml\n\n\u2190 dependsOn:\n  [role-identity, role-storage, role-ingress]", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "spark-history-server/\n  base/\n    kustomization.yaml\n    helmrelease-main.yaml\n    helmrelease-proxy.yaml\n  overlays/\n    with-proxy/\n      kustomization.yaml\n    without-proxy/\n      kustomization.yaml\n\n\u2190 dependsOn:\n  [role-identity, role-storage, role-ingress]", "lineHeight": 1.25
+    },
+
+    {
+      "id": "airflow-bg", "type": "rectangle",
+      "x": 750, "y": 1290, "width": 320, "height": 145,
+      "strokeColor": "#c2255c", "backgroundColor": "#ffdeeb", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 39, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "airflow-text", "type": "text",
+      "x": 765, "y": 1298, "width": 290, "height": 128,
+      "strokeColor": "#7d1535", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 40, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "airflow/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-external-secrets,\n   role-database-server, role-ingress]", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "airflow/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-external-secrets,\n   role-database-server, role-ingress]", "lineHeight": 1.25
+    },
+
+    {
+      "id": "trino-bg", "type": "rectangle",
+      "x": 1100, "y": 1290, "width": 290, "height": 145,
+      "strokeColor": "#c2255c", "backgroundColor": "#ffdeeb", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 41, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "trino-text", "type": "text",
+      "x": 1115, "y": 1298, "width": 260, "height": 128,
+      "strokeColor": "#7d1535", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 42, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "trinodb/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-data-catalog,\n   role-ingress]", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "trinodb/\n  kustomization.yaml\n  helmrelease.yaml\n\n\u2190 dependsOn:\n  [role-data-catalog,\n   role-ingress]", "lineHeight": 1.25
+    },
+
+    {
+      "id": "others-bg", "type": "rectangle",
+      "x": 1420, "y": 1290, "width": 260, "height": 145,
+      "strokeColor": "#c2255c", "backgroundColor": "#ffdeeb", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 43, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "others-text", "type": "text",
+      "x": 1435, "y": 1298, "width": 230, "height": 128,
+      "strokeColor": "#7d1535", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 44, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "jupyterhub/\n  kustomization.yaml\n  helmrelease.yaml\n\nsuperset/\n  helmrelease.yaml\n\nokdp-examples/", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "jupyterhub/\n  kustomization.yaml\n  helmrelease.yaml\n\nsuperset/\n  helmrelease.yaml\n\nokdp-examples/", "lineHeight": 1.25
+    },
+
+    {
+      "id": "packages-bg", "type": "rectangle",
+      "x": 1720, "y": 1290, "width": 360, "height": 145,
+      "strokeColor": "#868e96", "backgroundColor": "#f1f3f5", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "dashed", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 45, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "packages-text", "type": "text",
+      "x": 1735, "y": 1298, "width": 330, "height": 128,
+      "strokeColor": "#495057", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 46, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "packages/okdp-packages/\n  airflow/\n  hive-metastore/\n  seaweedfs/\n  spark-history-server/  ...\n\n\u26a0 DEPRECATED \u2014 KuboCD Package descriptors\n  remove gradually as each app \u2192 apps/", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "packages/okdp-packages/\n  airflow/\n  hive-metastore/\n  seaweedfs/\n  spark-history-server/  ...\n\n\u26a0 DEPRECATED \u2014 KuboCD Package descriptors\n  remove gradually as each app \u2192 apps/", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arr-roles-infra", "type": "arrow",
+      "x": 705, "y": 692, "width": 2, "height": 206,
+      "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "startArrowhead": null, "endArrowhead": "arrow",
+      "points": [[0, 0], [0, 206]],
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 47, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "arr-roles-infra-lbl", "type": "text",
+      "x": 715, "y": 770, "width": 260, "height": 35,
+      "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 48, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "path: ./infra/seaweedfs\nwait: true", "fontSize": 11, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "path: ./infra/seaweedfs\nwait: true", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arr-context-roles", "type": "arrow",
+      "x": 422, "y": 355, "width": 26, "height": 0,
+      "strokeColor": "#2f9e44", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "dashed", "roughness": 0, "opacity": 100,
+      "startArrowhead": null, "endArrowhead": "arrow",
+      "points": [[0, 0], [26, 0]],
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 49, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "arr-context-roles-lbl", "type": "text",
+      "x": 425, "y": 333, "width": 280, "height": 18,
+      "strokeColor": "#2f9e44", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 50, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "substituteFrom \u2192 Cluster ConfigMaps", "fontSize": 11, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "substituteFrom \u2192 Cluster ConfigMaps", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arr-apps-roles", "type": "arrow",
+      "x": 700, "y": 1288, "width": 0, "height": -600,
+      "strokeColor": "#c2255c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 2, "strokeStyle": "dashed", "roughness": 0, "opacity": 100,
+      "startArrowhead": null, "endArrowhead": "arrow",
+      "points": [[0, 0], [0, -600]],
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 51, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "arr-apps-roles-lbl", "type": "text",
+      "x": 710, "y": 1260, "width": 380, "height": 18,
+      "strokeColor": "#c2255c", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 52, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "dependsOn: role names only (never concrete service names)", "fontSize": 11, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "dependsOn: role names only (never concrete service names)", "lineHeight": 1.25
+    },
+
+    {
+      "id": "legend-bg", "type": "rectangle",
+      "x": 20, "y": 1635, "width": 1100, "height": 80,
+      "strokeColor": "#495057", "backgroundColor": "#f8f9fa", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 90,
+      "roundness": {"type": 3}, "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 53, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false
+    },
+    {
+      "id": "legend-text", "type": "text",
+      "x": 35, "y": 1643, "width": 1070, "height": 60,
+      "strokeColor": "#343a40", "backgroundColor": "transparent", "fillStyle": "solid",
+      "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
+      "angle": 0, "isDeleted": false, "version": 1, "versionNonce": 54, "updated": 1, "groupIds": [], "frameId": null, "link": null, "locked": false,
+      "text": "LEGEND\n\ud83d\udd35 clusters/sandbox/ \u2014 cluster-specific (only this changes per cluster)   \ud83d\udfe2 context/ \u2014 replaces KuboCD Context CR   \ud83d\udfe1 roles/ \u2014 THE KEY: role-as-Kustomization\n\ud83d\udfe3 infra/ \u2014 Layer 1 infrastructure HelmReleases (shared)   \ud83d\udd34 apps/ \u2014 Layer 3 application HelmReleases   \u2b1c packages/ \u2014 deprecated KuboCD descriptors", "fontSize": 12, "fontFamily": 3,
+      "textAlign": "left", "verticalAlign": "top", "containerId": null, "originalText": "LEGEND", "lineHeight": 1.25
+    }
+
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff",
+    "gridSize": null
+  },
+  "files": {}
+}
