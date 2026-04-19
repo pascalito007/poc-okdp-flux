@@ -1,0 +1,83 @@
+# Spark History Server values for OKDP Sandbox
+# Chart: oci://quay.io/okdp/charts/spark-history-server 1.0.0
+#
+# Requires:
+#   - Secret "creds-spark-history-s3" with keys: accessKey, secretKey
+#   - Secret "creds-oidc" with keys: client_id, client_secret
+#   - Secret "certs-bundle" (trust-manager CA bundle)
+#   - SeaweedFS S3 endpoint accessible with spark-events bucket
+
+image:
+  repository: quay.io/okdp/spark
+  pullPolicy: IfNotPresent
+  tag: "spark-3.5.6-scala-2.12-java-17"
+
+ingress:
+  enabled: true
+  ingressClassName: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: default-issuer
+  hosts:
+    - host: spark-history-default.okdp.sandbox
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - spark-history-default.okdp.sandbox
+      secretName: spark-history-server-tls
+
+config:
+  spark.hadoop.fs.s3a.endpoint: https://seaweedfs-seaweedfs-default.okdp.sandbox
+  spark.hadoop.fs.s3a.connection.ssl.enabled: true
+  spark.history.fs.logDirectory: "s3a://spark-events/event-logs/"
+  spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+  spark.hadoop.fs.s3a.path.style.access: true
+  spark.ui.filters: io.okdp.spark.authc.OidcAuthFilter
+  spark.user.groups.mapping: io.okdp.spark.authz.OidcGroupMappingServiceProvider
+  spark.history.ui.acls.enable: true
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.issuer-uri: https://keycloak.okdp.sandbox/realms/master
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.redirect-uri: https://spark-web-proxy-default.okdp.sandbox/home
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.scope: "openid+profile+email+offline_access+groups"
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.cookie-max-age-minutes: 480
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.cookie-cipher-secret-key: FC5E81345CED0E256DC42E410362FF6E
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.cookie-is-secure: true
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.use-pkce: true
+  spark.io.okdp.spark.authc.OidcAuthFilter.param.user-id: email
+  spark.history.ui.admin.acls.groups: admins
+
+extraEnvs:
+  - name: SPARK_HISTORY_OPTS
+    value: -Dcom.amazonaws.sdk.disableCertChecking=true
+  - name: JAVA_TOOL_OPTIONS
+    value: "-Djavax.net.ssl.trustStore=/cacerts/bundle.p12 -Djavax.net.ssl.trustStorePassword="
+  - name: AWS_ACCESS_KEY_ID
+    valueFrom:
+      secretKeyRef:
+        name: creds-spark-history-s3
+        key: accessKey
+  - name: AWS_SECRET_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: creds-spark-history-s3
+        key: secretKey
+  - name: AUTH_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: creds-oidc
+        key: client_id
+  - name: AUTH_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: creds-oidc
+        key: client_secret
+
+extraVolumes:
+  - name: cacerts
+    secret:
+      secretName: certs-bundle
+
+extraVolumeMounts:
+  - name: cacerts
+    mountPath: /cacerts

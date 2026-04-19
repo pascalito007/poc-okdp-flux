@@ -1,0 +1,44 @@
+# Spark Web Proxy — HelmRelease
+# dependsOn: [spark-history-server-main]
+# Provides real-time monitoring of running Spark applications within the History Server UI
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: spark-web-proxy
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: spark-web-proxy
+      version: "0.1.0"
+      sourceRef:
+        kind: HelmRepository
+        name: okdp
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    sparkHistoryServer:
+      url: "http://spark-history-server:18080"
+    ingress:
+      enabled: true
+      ingressClassName: ${OKDP_INGRESS_CLASS}
+      annotations:
+        cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+      hosts:
+        - host: "spark-proxy-default.${OKDP_INGRESS_SUFFIX}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: spark-proxy-tls
+          hosts:
+            - "spark-proxy-default.${OKDP_INGRESS_SUFFIX}"

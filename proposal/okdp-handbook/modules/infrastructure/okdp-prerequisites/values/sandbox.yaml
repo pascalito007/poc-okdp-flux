@@ -1,0 +1,168 @@
+# OKDP Prerequisites — Sandbox values
+# Deploys ALL infrastructure in one shot:
+#   cert-manager + ingress-nginx + CloudNativePG + Keycloak + SeaweedFS
+#
+# Usage:
+#   helm dependency build
+#   helm install okdp-prerequisites . -n okdp-system --create-namespace -f values/sandbox.yaml
+#
+# Post-install:
+#   kubectl apply -f manifests/cert-manager-issuers.yaml
+#   kubectl apply -f manifests/cnpg-cluster.yaml
+#   kubectl apply -f manifests/secrets.yaml
+#   Configure Keycloak realm (see ../keycloak/INSTALL.md)
+
+# --- cert-manager ---
+cert-manager:
+  enabled: true
+  installCRDs: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# --- ingress-nginx ---
+ingress-nginx:
+  enabled: true
+  controller:
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30080
+        https: 30443
+    config:
+      proxy-body-size: "130m"
+      proxy-connect-timeout: "300"
+      proxy-read-timeout: "300"
+      proxy-send-timeout: "300"
+
+# --- CloudNativePG ---
+cloudnative-pg:
+  enabled: true
+  replicaCount: 1
+
+# --- Keycloak ---
+keycloakx:
+  enabled: true
+  replicas: 1
+  database:
+    vendor: postgres
+    hostname: postgresql-instance-rw.cnpg-system.svc.cluster.local
+    port: 5432
+    database: keycloak
+    existingSecret: creds-keycloak-db
+    existingSecretKey: password
+  http:
+    relativePath: "/"
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: default-issuer
+    rules:
+      - host: keycloak.okdp.sandbox
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - hosts:
+          - keycloak.okdp.sandbox
+        secretName: keycloak-tls
+  command:
+    - "/opt/keycloak/bin/kc.sh"
+    - "start"
+    - "--hostname=keycloak.okdp.sandbox"
+    - "--hostname-strict=false"
+    - "--http-enabled=true"
+    - "--proxy=edge"
+  extraEnv: |
+    - name: KEYCLOAK_ADMIN
+      value: admin
+    - name: KEYCLOAK_ADMIN_PASSWORD
+      value: admin
+    - name: KC_DB_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: creds-keycloak-db
+          key: username
+
+# --- SeaweedFS ---
+seaweedfs:
+  enabled: true
+  global:
+    imageName: chrislusf/seaweedfs
+  master:
+    enabled: true
+    replicas: 1
+    data:
+      type: "persistentVolumeClaim"
+      storageClass: "standard"
+      size: "1Gi"
+    logs:
+      type: "persistentVolumeClaim"
+      storageClass: "standard"
+      size: "0.5Gi"
+  volume:
+    enabled: true
+    replicas: 1
+    dataDirs:
+      - name: data
+        type: "persistentVolumeClaim"
+        storageClass: "standard"
+        size: "2Gi"
+        maxVolumes: 0
+  filer:
+    enabled: true
+    replicas: 1
+    enablePVC: true
+    port: 8888
+    data:
+      type: "persistentVolumeClaim"
+      storageClass: "standard"
+      size: "0.5Gi"
+    logs:
+      type: "persistentVolumeClaim"
+      storageClass: "standard"
+      size: "0.5Gi"
+    s3:
+      enabled: true
+      enableAuth: true
+      existingConfigSecret: creds-seaweedfs-secret
+      createBuckets:
+        - name: hive
+          anonymousRead: true
+        - name: spark-events
+          anonymousRead: true
+    ingress:
+      enabled: true
+      className: nginx
+      annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+        cert-manager.io/cluster-issuer: "default-issuer"
+        nginx.ingress.kubernetes.io/auth-type: basic
+        nginx.ingress.kubernetes.io/auth-secret: auth-user-secret
+        nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+      host: "seaweedfs-seaweedfs-console-default.okdp.sandbox"
+      path: "/"
+      pathType: Prefix
+      tls:
+        - secretName: seaweedfs-filer-tls
+          hosts:
+            - "seaweedfs-seaweedfs-console-default.okdp.sandbox"
+  s3:
+    enabled: false
+    ingress:
+      enabled: true
+      className: nginx
+      annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+        cert-manager.io/cluster-issuer: "default-issuer"
+      host: "seaweedfs-seaweedfs-default.okdp.sandbox"
+      tls:
+        - secretName: seaweedfs-s3-tls
+          hosts:
+            - "seaweedfs-seaweedfs-default.okdp.sandbox"

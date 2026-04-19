@@ -1,0 +1,58 @@
+# OKDP OCI chart repositories (shared)
+# These are the OKDP-maintained Helm charts published as OCI artifacts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: okdp-hive-metastore
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: oci://quay.io/okdp/charts/hive-metastore
+  ref:
+    semver: ">=1.4.0"
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: okdp-spark-history-server
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: oci://quay.io/okdp/charts/spark-history-server
+  ref:
+    semver: ">=1.0.0"
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: okdp-superset
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: oci://quay.io/okdp/charts/superset
+  ref:
+    semver: ">=0.15.0"
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: okdp-examples
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: oci://quay.io/okdp/charts/okdp-examples
+  ref:
+    semver: ">=1.1.0"
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy

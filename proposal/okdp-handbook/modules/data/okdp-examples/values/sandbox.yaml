@@ -1,0 +1,50 @@
+# OKDP Examples values for OKDP Sandbox
+# Chart: oci://quay.io/okdp/charts/okdp-examples 1.1.0
+#
+# Requires:
+#   - Secret "creds-examples-s3" with keys: S3_ACCESS_KEY, S3_SECRET_KEY
+#   - SeaweedFS S3 endpoint accessible
+#   - Trino endpoint accessible
+
+replicaCount: 1
+
+image:
+  repository: quay.io/okdp/okdp-examples
+  tag: 1.0.0
+  pullPolicy: Always
+
+extraEnvRaw:
+  - name: MC_INSECURE
+    value: "1"
+  - name: S3_ENDPOINT
+    value: https://seaweedfs-seaweedfs-default.okdp.sandbox
+  - name: S3_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: creds-examples-s3
+        key: S3_ACCESS_KEY
+  - name: S3_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: creds-examples-s3
+        key: S3_SECRET_KEY
+  - name: BUCKET
+    value: okdp
+  - name: BUCKET_PREFIX
+    value: "examples/data/raw/tripdata"
+  - name: DATA_URL
+    value: https://d37ci6vzurychx.cloudfront.net/trip-data
+  - name: TRINO_SERVER_URL
+    value: https://trino-default.okdp.sandbox
+  - name: TRINO_TERMINAL
+    value: dumb
+  - name: SPARK_EVENT_LOG_DIRECTORY
+    value: "s3a://spark-events/event-logs/"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 250Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi

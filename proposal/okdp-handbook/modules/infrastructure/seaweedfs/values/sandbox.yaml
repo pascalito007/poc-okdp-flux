@@ -1,0 +1,86 @@
+# SeaweedFS values for OKDP Sandbox
+# Chart: seaweedfs/seaweedfs 4.0.407
+#
+# Requires:
+#   - Secret "creds-seaweedfs-secret" with S3 identity config
+#   - Secret "auth-user-secret" with basic auth for filer console
+#   - cert-manager ClusterIssuer "default-issuer"
+#   - ingress-nginx IngressClass "nginx"
+
+global:
+  imageName: chrislusf/seaweedfs
+
+master:
+  enabled: true
+  replicas: 1
+  data:
+    type: "persistentVolumeClaim"
+    storageClass: "standard"
+    size: "1Gi"
+  logs:
+    type: "persistentVolumeClaim"
+    storageClass: "standard"
+    size: "0.5Gi"
+
+volume:
+  enabled: true
+  replicas: 1
+  dataDirs:
+    - name: data
+      type: "persistentVolumeClaim"
+      storageClass: "standard"
+      size: "2Gi"
+      maxVolumes: 0
+
+filer:
+  enabled: true
+  replicas: 1
+  enablePVC: true
+  port: 8888
+  data:
+    type: "persistentVolumeClaim"
+    storageClass: "standard"
+    size: "0.5Gi"
+  logs:
+    type: "persistentVolumeClaim"
+    storageClass: "standard"
+    size: "0.5Gi"
+  s3:
+    enabled: true
+    enableAuth: true
+    existingConfigSecret: creds-seaweedfs-secret
+    createBuckets:
+      - name: hive
+        anonymousRead: true
+      - name: spark-events
+        anonymousRead: true
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+      cert-manager.io/cluster-issuer: "default-issuer"
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: auth-user-secret
+      nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+    host: "seaweedfs-seaweedfs-console-default.okdp.sandbox"
+    path: "/"
+    pathType: Prefix
+    tls:
+      - secretName: seaweedfs-filer-tls
+        hosts:
+          - "seaweedfs-seaweedfs-console-default.okdp.sandbox"
+
+s3:
+  enabled: false
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+      cert-manager.io/cluster-issuer: "default-issuer"
+    host: "seaweedfs-seaweedfs-default.okdp.sandbox"
+    tls:
+      - secretName: seaweedfs-s3-tls
+        hosts:
+          - "seaweedfs-seaweedfs-default.okdp.sandbox"

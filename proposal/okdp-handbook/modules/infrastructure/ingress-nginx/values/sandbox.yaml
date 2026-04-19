@@ -1,0 +1,32 @@
+# ingress-nginx values for OKDP Sandbox (Kind cluster)
+# Chart: ingress-nginx/ingress-nginx 4.12.1
+
+controller:
+  # NodePort for Kind cluster (maps to host ports via Kind extraPortMappings)
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+
+  # Allow large uploads (SeaweedFS, Airflow DAGs)
+  config:
+    proxy-body-size: "130m"
+    proxy-connect-timeout: "300"
+    proxy-read-timeout: "300"
+    proxy-send-timeout: "300"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Metrics (optional)
+  metrics:
+    enabled: false
+
+  admissionWebhooks:
+    enabled: true

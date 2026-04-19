@@ -1,0 +1,63 @@
+# Spark History Server — Main HelmRelease
+# dependsOn: [role-identity, role-storage, role-ingress]
+# Variables substituted by postBuild
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: spark-history-server
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: okdp-spark-history-server
+    namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    image:
+      repository: quay.io/okdp/spark
+      tag: "spark-3.5.1-scala-2.12-java-17-2024-04-04-1.0.0"
+      pullPolicy: IfNotPresent
+
+    config:
+      spark.history.provider: "org.apache.spark.deploy.history.FsHistoryProvider"
+      spark.history.fs.logDirectory: "${OKDP_SPARK_EVENTS_LOG_DIR}"
+      spark.history.fs.update.interval: "10s"
+      spark.history.retainedApplications: 50
+      spark.history.ui.port: 18080
+
+    ingress:
+      enabled: true
+      ingressClassName: ${OKDP_INGRESS_CLASS}
+      annotations:
+        cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+      hosts:
+        - host: "spark-history-default.${OKDP_INGRESS_SUFFIX}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: spark-history-tls
+          hosts:
+            - "spark-history-default.${OKDP_INGRESS_SUFFIX}"
+
+    # S3 configuration for event logs
+    extraEnvs:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: ${OKDP_SPARK_HISTORY_S3_CREDS_SECRET}
+            key: accessKey
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: ${OKDP_SPARK_HISTORY_S3_CREDS_SECRET}
+            key: secretKey

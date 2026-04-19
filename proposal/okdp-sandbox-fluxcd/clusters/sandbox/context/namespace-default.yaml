@@ -1,0 +1,28 @@
+# Default namespace variables
+# Namespace-scoped configuration for the default deployment namespace
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: namespace-vars
+  namespace: flux-system
+data:
+  OKDP_TARGET_NAMESPACE: "default"
+
+  # Database names per service
+  OKDP_HMS_DB_NAME: "hms"
+  OKDP_HMS_DB_CREDS_SECRET: "creds-hms-db"
+  OKDP_SUPERSET_DB_NAME: "superset"
+  OKDP_SUPERSET_DB_CREDS_SECRET: "creds-superset-db"
+  OKDP_AIRFLOW_DB_NAME: "airflow"
+  OKDP_AIRFLOW_DB_CREDS_SECRET: "creds-airflow-db"
+  OKDP_SUPERSET_EXAMPLES_DB_NAME: "superset-examples"
+  OKDP_SUPERSET_EXAMPLES_DB_CREDS_SECRET: "creds-superset-examples-db"
+
+  # Superset secrets
+  OKDP_SUPERSET_SECRET_NAME: "creds-superset-secret-key"
+  OKDP_SUPERSET_SECRET_KEY: "superset_secret_key"
+  OKDP_REDIS_CREDS_SECRET: "creds-redis"
+
+  # Spark RBAC
+  OKDP_SPARK_SERVICE_ACCOUNT: "spark"

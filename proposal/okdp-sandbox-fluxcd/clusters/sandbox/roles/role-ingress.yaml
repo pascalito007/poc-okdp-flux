@@ -1,0 +1,22 @@
+# Role: Ingress
+# Deploys ingress-nginx controller
+# Apps that expose web UIs dependsOn this role
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: role-ingress
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-certificates
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/infra/ingress-nginx
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars

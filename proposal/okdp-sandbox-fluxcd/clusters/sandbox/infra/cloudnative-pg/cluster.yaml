@@ -1,0 +1,45 @@
+# CNPG PostgreSQL Cluster instance
+# Provides the shared database for all OKDP services
+# Variables substituted by postBuild from cluster-vars and namespace-vars
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgresql-instance
+  namespace: cnpg-system
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.4
+
+  storage:
+    size: 5Gi
+    storageClass: ${OKDP_STORAGE_CLASS_DATA}
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+
+  bootstrap:
+    initdb:
+      database: postgres
+      owner: postgres
+      postInitSQL:
+        - CREATE DATABASE hms;
+        - CREATE DATABASE superset;
+        - CREATE DATABASE keycloak;
+        - 'CREATE DATABASE "seaweedfs-default";'
+        - CREATE DATABASE airflow;
+        - 'CREATE DATABASE "superset-examples";'
+        - CREATE USER hms WITH PASSWORD 'hms123';
+        - CREATE USER superset WITH PASSWORD 'superset123';
+        - CREATE USER keycloak WITH PASSWORD 'keycloak123';
+        - CREATE USER seaweedfs WITH PASSWORD 'seaweedfs123';
+        - CREATE USER airflow WITH PASSWORD 'airflow123';
+        - CREATE USER examples WITH PASSWORD 'examples123';
+        - GRANT ALL PRIVILEGES ON DATABASE hms TO hms;
+        - GRANT ALL PRIVILEGES ON DATABASE superset TO superset;
+        - GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;
+        - 'GRANT ALL PRIVILEGES ON DATABASE "seaweedfs-default" TO seaweedfs;'
+        - GRANT ALL PRIVILEGES ON DATABASE airflow TO airflow;
+        - 'GRANT ALL PRIVILEGES ON DATABASE "superset-examples" TO examples;'

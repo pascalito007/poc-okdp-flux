@@ -1,0 +1,48 @@
+# Spark Operator HelmRelease
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: spark-operator
+  namespace: spark-operator
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: spark-operator
+      version: "2.4.0"
+      sourceRef:
+        kind: HelmRepository
+        name: spark-operator
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    hook:
+      upgradeCrd: false
+    prometheus:
+      metrics:
+        enable: true
+      podMonitor:
+        create: false
+    controller:
+      rbac:
+        createRole: true
+      podSecurityContext:
+        fsGroup: null
+    webhook:
+      enable: true
+      podSecurityContext:
+        fsGroup: null
+    spark:
+      jobNamespaces:
+        - ""
+      serviceAccount:
+        create: false
+      rbac:
+        create: false

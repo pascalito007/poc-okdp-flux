@@ -1,0 +1,13 @@
+# CloudNativePG operator values for OKDP Sandbox
+# Chart: cnpg/cloudnative-pg 0.23.0
+
+# The operator itself — the PostgreSQL Cluster is created separately via CR
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

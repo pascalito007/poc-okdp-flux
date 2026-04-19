@@ -1,0 +1,39 @@
+# Storage-level shared variables
+# S3 endpoints, buckets, credential secret references
+# Referenced by apps that need S3 access via postBuild.substituteFrom
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-vars
+  namespace: flux-system
+data:
+  # SeaweedFS S3 endpoint (namespace-scoped)
+  OKDP_S3_ENDPOINT: "https://seaweedfs-seaweedfs-default.okdp.sandbox"
+  OKDP_S3_FILER_ENDPOINT: "https://seaweedfs-seaweedfs-console-default.okdp.sandbox"
+
+  # Hive Metastore S3
+  OKDP_HMS_S3_BUCKET: "hive"
+  OKDP_HMS_S3_CREDS_SECRET: "creds-hms-s3"
+  OKDP_HMS_S3_ACCESS_KEY_KEY: "accessKey"
+  OKDP_HMS_S3_SECRET_KEY_KEY: "secretKey"
+
+  # Spark History S3
+  OKDP_SPARK_EVENTS_BUCKET: "spark-events"
+  OKDP_SPARK_EVENTS_LOG_DIR: "s3a://spark-events/event-logs/"
+  OKDP_SPARK_HISTORY_S3_CREDS_SECRET: "creds-spark-history-s3"
+
+  # Jupyter S3
+  OKDP_JUPYTER_S3_CREDS_SECRET: "creds-jupyter-s3"
+  OKDP_JUPYTER_S3_ACCESS_KEY_KEY: "S3_ACCESS_KEY"
+  OKDP_JUPYTER_S3_SECRET_KEY_KEY: "S3_SECRET_KEY"
+
+  # Trino S3
+  OKDP_TRINO_S3_CREDS_SECRET: "creds-trino-s3"
+
+  # Airflow S3
+  OKDP_AIRFLOW_S3_BUCKET: "airflow-logs"
+  OKDP_AIRFLOW_S3_CREDS_SECRET: "creds-airflow-s3"
+
+  # Examples S3
+  OKDP_EXAMPLES_S3_CREDS_SECRET: "creds-examples-s3"

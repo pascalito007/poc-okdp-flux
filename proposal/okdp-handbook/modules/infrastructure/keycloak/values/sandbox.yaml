@@ -1,0 +1,58 @@
+# Keycloak values for OKDP Sandbox
+# Chart: codecentric/keycloakx 2.5.1
+#
+# Requires:
+#   - PostgreSQL database "keycloak" on postgresql-instance-rw.cnpg-system.svc.cluster.local:5432
+#   - Secret "creds-keycloak-db" in keycloak namespace with keys: username, password
+#   - cert-manager ClusterIssuer "default-issuer"
+#   - ingress-nginx IngressClass "nginx"
+#
+# Post-install: realm configuration (users, groups, OIDC clients) must be done
+# via Keycloak admin UI or REST API. See INSTALL.md for details.
+
+replicas: 1
+
+database:
+  vendor: postgres
+  hostname: postgresql-instance-rw.cnpg-system.svc.cluster.local
+  port: 5432
+  database: keycloak
+  existingSecret: creds-keycloak-db
+  existingSecretKey: password
+
+http:
+  relativePath: "/"
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: default-issuer
+  rules:
+    - host: keycloak.okdp.sandbox
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - keycloak.okdp.sandbox
+      secretName: keycloak-tls
+
+command:
+  - "/opt/keycloak/bin/kc.sh"
+  - "start"
+  - "--hostname=keycloak.okdp.sandbox"
+  - "--hostname-strict=false"
+  - "--http-enabled=true"
+  - "--proxy=edge"
+
+extraEnv: |
+  - name: KEYCLOAK_ADMIN
+    value: admin
+  - name: KEYCLOAK_ADMIN_PASSWORD
+    value: admin
+  - name: KC_DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: creds-keycloak-db
+        key: username

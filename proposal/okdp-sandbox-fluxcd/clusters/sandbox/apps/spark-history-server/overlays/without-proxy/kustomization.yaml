@@ -1,0 +1,6 @@
+# Overlay: without-proxy (default)
+# Uses base configuration as-is, no proxy settings
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base

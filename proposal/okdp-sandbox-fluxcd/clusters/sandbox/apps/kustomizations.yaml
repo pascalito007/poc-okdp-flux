@@ -1,0 +1,188 @@
+# App-level Kustomizations
+# Each app Kustomization dependsOn roles (not specific infra components)
+# This is the FluxCD-native equivalent of KuboCD's role-based dependency system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-spark-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: sources
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/spark-operator
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: namespace-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-hive-metastore
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-database-server
+    - name: role-storage
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/hive-metastore
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: storage-vars
+      - kind: ConfigMap
+        name: namespace-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-spark-history-server
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-identity
+    - name: role-storage
+    - name: role-ingress
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  # Use the without-proxy overlay by default
+  # Switch to ./clusters/sandbox/apps/spark-history-server/overlays/with-proxy for proxy envs
+  path: ./clusters/sandbox/apps/spark-history-server/overlays/without-proxy
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: storage-vars
+      - kind: ConfigMap
+        name: identity-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-airflow
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-database-server
+    - name: role-ingress
+    - name: role-certificates
+    - name: app-spark-operator
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/airflow
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: namespace-vars
+      - kind: ConfigMap
+        name: storage-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-trinodb
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: app-hive-metastore
+    - name: role-identity
+    - name: role-storage
+    - name: role-ingress
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/trinodb
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: storage-vars
+      - kind: ConfigMap
+        name: identity-vars
+      - kind: ConfigMap
+        name: namespace-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-superset
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-database-server
+    - name: role-identity
+    - name: role-ingress
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/superset
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: identity-vars
+      - kind: ConfigMap
+        name: namespace-vars
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-jupyterhub
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: role-identity
+    - name: role-storage
+    - name: role-ingress
+    - name: app-spark-operator
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/apps/jupyterhub
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: ConfigMap
+        name: storage-vars
+      - kind: ConfigMap
+        name: identity-vars
+      - kind: ConfigMap
+        name: namespace-vars

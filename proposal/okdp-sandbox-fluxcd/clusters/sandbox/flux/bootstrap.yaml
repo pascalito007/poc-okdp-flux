@@ -1,0 +1,45 @@
+# FluxCD Bootstrap — GitRepository + Root Kustomization
+#
+# This replaces the KuboCD controller installation.
+# Flux watches this Git repo and reconciles all resources automatically.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: okdp-sandbox
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/OKDP/okdp-sandbox.git
+  ref:
+    branch: main
+
+---
+# Root Kustomization — deploys sources first
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: sources
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/infra/sources
+  prune: true
+
+---
+# Context — shared variables (ConfigMaps/Secrets)
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: context
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: okdp-sandbox
+  path: ./clusters/sandbox/context
+  prune: true

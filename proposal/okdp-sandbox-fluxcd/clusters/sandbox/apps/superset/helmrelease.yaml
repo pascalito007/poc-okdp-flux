@@ -1,0 +1,154 @@
+# Apache Superset HelmRelease
+# dependsOn: [role-database-server, role-identity, role-ingress]
+# Variables substituted by postBuild
+#
+# Extracted from KuboCD package superset.yaml (tag 5.0.0-p02)
+# Uses OKDP OCI chart: oci://quay.io/okdp/charts/superset 0.15.0
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: superset
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: okdp-superset
+    namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    okdp:
+      superset:
+        superset_secret_key: ~
+        load_examples:
+          enabled: true
+          jdbc_uri: "postgresql+psycopg2://$$DB_EXAMPLES_USER:$$DB_EXAMPLES_PASS@$$DB_EXAMPLES_HOST:$$DB_EXAMPLES_PORT/$$DB_EXAMPLES_NAME?options=-csearch_path%3Dmain"
+      oauth:
+        enabled: true
+        provider: "keycloak"
+        base_url: "${OKDP_KEYCLOAK_AUTH_URL}"
+        scope: "${OKDP_OIDC_SCOPE}"
+        use_pkce: true
+        ssl_certificate_verify: "False"
+
+    superset:
+      postgresql:
+        enabled: false
+      redis:
+        enabled: true
+        architecture: standalone
+        auth:
+          enabled: false
+
+      extraEnvRaw:
+        - name: SUPERSET_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_SUPERSET_SECRET_NAME}
+              key: ${OKDP_SUPERSET_SECRET_KEY}
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_SUPERSET_DB_CREDS_SECRET}
+              key: username
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_SUPERSET_DB_CREDS_SECRET}
+              key: password
+        - name: REDIS_USER
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_REDIS_CREDS_SECRET}
+              key: username
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_REDIS_CREDS_SECRET}
+              key: password
+        - name: AUTH_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_OIDC_CREDS_SECRET}
+              key: ${OKDP_OIDC_CLIENT_ID_KEY}
+        - name: AUTH_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_OIDC_CREDS_SECRET}
+              key: ${OKDP_OIDC_CLIENT_SECRET_KEY}
+        - name: DB_EXAMPLES_HOST
+          value: ${OKDP_DB_HOST}
+        - name: DB_EXAMPLES_PORT
+          value: "${OKDP_DB_PORT}"
+        - name: DB_EXAMPLES_NAME
+          value: ${OKDP_SUPERSET_EXAMPLES_DB_NAME}
+        - name: DB_EXAMPLES_USER
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_SUPERSET_EXAMPLES_DB_CREDS_SECRET}
+              key: username
+        - name: DB_EXAMPLES_PASS
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_SUPERSET_EXAMPLES_DB_CREDS_SECRET}
+              key: password
+
+      supersetNode:
+        connections:
+          db_host: "${OKDP_DB_HOST}"
+          db_port: "${OKDP_DB_PORT}"
+          db_name: ${OKDP_SUPERSET_DB_NAME}
+          db_user: ~
+          db_pass: ~
+          redis_host: "superset-main-redis-headless"
+          redis_port: 6379
+          redis_user: ~
+          redis_password: ~
+          redis_cache_db: "1"
+          redis_celery_db: "0"
+
+      extraConfigs:
+        import_datasources.yaml: |
+          databases:
+          - database_name: trino
+            sqlalchemy_uri: "trino://trino@trino-default.${OKDP_INGRESS_SUFFIX}:443/lakehouse/nyc_tripdata?http_scheme=https&verify=false"
+            extra: |
+              {
+                "engine_params": {},
+                "metadata_params": {},
+                "connect_args": {
+                  "http_scheme": "https",
+                  "verify": false
+                },
+                "metadata_cache_timeout": {},
+                "schemas_allowed_for_file_upload": []
+              }
+            allow_run_async: true
+            allow_dml: true
+            allow_ctas: true
+            allow_cvas: true
+            expose_in_sqllab: true
+
+      ingress:
+        enabled: true
+        ingressClassName: "${OKDP_INGRESS_CLASS}"
+        annotations:
+          cert-manager.io/cluster-issuer: ${OKDP_CLUSTER_ISSUER}
+          nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+        path: /
+        pathType: ImplementationSpecific
+        hosts:
+          - "superset-default.${OKDP_INGRESS_SUFFIX}"
+        tls:
+          - hosts:
+              - "superset-default.${OKDP_INGRESS_SUFFIX}"
+            secretName: "superset-tls-secret"

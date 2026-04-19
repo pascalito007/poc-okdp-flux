@@ -1,0 +1,48 @@
+# cert-manager values for Production environments
+# Chart: jetstack/cert-manager v1.17.1
+#
+# Adjust replicas, resources, and monitoring for production workloads.
+# Replace the self-signed CA with Let's Encrypt or your organization's CA.
+
+installCRDs: true
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+webhook:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+cainjector:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+# Enable Prometheus metrics
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+
+# Pod disruption budgets for HA
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

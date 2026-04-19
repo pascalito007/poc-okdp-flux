@@ -1,0 +1,167 @@
+# JupyterHub HelmRelease
+# dependsOn: [role-identity, role-storage, role-ingress, app-spark-operator]
+# Variables substituted by postBuild
+#
+# Extracted from KuboCD package jupyterhub.yaml (tag 4.3.1-p02)
+# Upstream chart: jupyterhub/jupyterhub 4.3.1
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: jupyterhub
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: jupyterhub
+      version: "4.3.1"
+      sourceRef:
+        kind: HelmRepository
+        name: jupyterhub
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: "jupyterhub"
+    nameOverride: "jupyterhub"
+
+    hub:
+      extraEnv:
+        OAUTH_CLIENT_ID:
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_OIDC_CREDS_SECRET}
+              key: ${OKDP_OIDC_CLIENT_ID_KEY}
+        OAUTH_CLIENT_SECRET:
+          valueFrom:
+            secretKeyRef:
+              name: ${OKDP_OIDC_CREDS_SECRET}
+              key: ${OKDP_OIDC_CLIENT_SECRET_KEY}
+      config:
+        Authenticator:
+          auto_login: true
+        GenericOAuthenticator:
+          oauth_callback_url: "https://jupyter-default.${OKDP_INGRESS_SUFFIX}/hub/oauth_callback"
+          authorize_url: "${OKDP_KEYCLOAK_AUTH_URL}/auth"
+          token_url: "${OKDP_KEYCLOAK_AUTH_URL}/token"
+          userdata_url: "${OKDP_KEYCLOAK_AUTH_URL}/userinfo"
+          validate_server_cert: false
+          login_service: keycloak
+          claim_groups_key: groups
+          manage_groups: true
+          admin_groups:
+            - "admins"
+          allowed_groups:
+            - "admins"
+          username_key: preferred_username
+          scope:
+            - openid
+            - groups
+        JupyterHub:
+          authenticator_class: generic-oauth
+      networkPolicy:
+        enabled: false
+      image:
+        pullPolicy: Always
+        name: quay.io/jupyterhub/k8s-hub
+        tag: "4.3.1"
+      db:
+        type: sqlite-pvc
+        pvc:
+          storage: 1Gi
+          storageClassName: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+
+    rbac:
+      create: true
+
+    cull:
+      enabled: false
+
+    proxy:
+      service:
+        type: ClusterIP
+
+    ingress:
+      enabled: true
+      annotations:
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+        cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+      ingressClassName: ${OKDP_INGRESS_CLASS}
+      hosts:
+        - "jupyter-default.${OKDP_INGRESS_SUFFIX}"
+      tls:
+        - secretName: jupyterhub-tls
+          hosts:
+            - "jupyter-default.${OKDP_INGRESS_SUFFIX}"
+
+    scheduling:
+      userScheduler:
+        enabled: false
+      userPlaceholder:
+        enabled: false
+
+    singleuser:
+      podNameTemplate: "jupyterhub-{username}{servername}"
+      image:
+        name: quay.io/okdp/jupyter/all-spark-notebook
+        tag: "spark-3.5.6-python-3.11-java-17-scala-2.12"
+      startTimeout: 600
+      extraEnv:
+        NB_USER: "$(JUPYTERHUB_USER)"
+        NB_UID: "1001"
+        NB_GID: "100"
+        CHOWN_HOME: "yes"
+        CHOWN_HOME_OPTS: "-R"
+        JUPYTER_ENABLE_LAB: "yes"
+        EDITOR: "vim"
+        PYTHONWARNINGS: "ignore:Unverified HTTPS request"
+        FS_S3_ENDPOINT_URL: "${OKDP_S3_ENDPOINT}"
+        FS_S3_ACCESS_KEY:
+          valueFrom:
+            secretKeyRef:
+              name: "${OKDP_JUPYTER_S3_CREDS_SECRET}"
+              key: "${OKDP_JUPYTER_S3_ACCESS_KEY_KEY}"
+        FS_S3_SECRET_KEY:
+          valueFrom:
+            secretKeyRef:
+              name: "${OKDP_JUPYTER_S3_CREDS_SECRET}"
+              key: "${OKDP_JUPYTER_S3_SECRET_KEY_KEY}"
+        POD_IP:
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      cpu:
+        limit: 1
+        guarantee: 0.5
+      memory:
+        limit: 2G
+        guarantee: 1G
+      serviceAccountName: ${OKDP_SPARK_SERVICE_ACCOUNT}
+      storage:
+        homeMountPath: "/home/{username}"
+        dynamic:
+          storageClass: ${OKDP_STORAGE_CLASS_WORKSPACE}
+          pvcNameTemplate: "jupyterhub-claim-{username}{servername}"
+          volumeNameTemplate: "jupyterhub-volume-{username}{servername}"
+        type: dynamic
+      cloudMetadata:
+        blockWithIptables: false
+      uid: 0
+      fsGid: 100
+      extraPodConfig:
+        automount_service_account_token: true
+        terminationGracePeriodSeconds: 120
+      networkPolicy:
+        enabled: false
+
+    prePuller:
+      hook:
+        enabled: false
+      continuous:
+        enabled: false
