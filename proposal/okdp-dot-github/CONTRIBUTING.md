@@ -12,19 +12,30 @@ Thank you for your interest in contributing to OKDP!
 
 ### Contributing Documentation
 
-Module documentation and install guides live in the
-[okdp-handbook](https://github.com/OKDP/okdp-handbook) repository.
+Helm chart install guides live in the
+[helm-handbook](https://github.com/OKDP/helm-handbook) repository.
 
-See the [okdp-handbook CONTRIBUTING.md](https://github.com/OKDP/okdp-handbook/blob/main/CONTRIBUTING.md)
+See the [helm-handbook CONTRIBUTING.md](https://github.com/OKDP/helm-handbook/blob/main/CONTRIBUTING.md)
 for documentation standards, templates, and review process.
 
 ### Contributing Code
 
-1. Fork the relevant repository
-2. Create a feature branch from `main`
+The workflow depends on the visibility of the target repository.
+
+#### Public repositories (open-source contribution)
+
+1. **Fork** the repository on GitHub
+2. Clone your fork and create a feature branch from `main`
 3. Make your changes
 4. Ensure CI passes (lint, tests, build)
-5. Submit a Pull Request
+5. Submit a Pull Request from your fork to the upstream `main`
+
+#### Private repositories (internal team contribution)
+
+1. Create a branch **directly from `main`** in the repository (no fork needed)
+2. Make your changes
+3. Ensure CI passes (lint, tests, build)
+4. Submit a Pull Request to `main`
 
 ### Commit Messages
 
@@ -40,7 +51,7 @@ chore: bump cert-manager to v1.17.1
 ### Pull Request Process
 
 - PRs require at least 1 maintainer approval
-- Documentation PRs (okdp-handbook) require 2 approvals (1 technical + 1 clarity)
+- Documentation PRs (helm-handbook) require 2 approvals (1 technical + 1 clarity)
 - All CI checks must pass
 - Keep PRs focused — one change per PR
 
@@ -49,7 +60,7 @@ chore: bump cert-manager to v1.17.1
 | Repository                                                  | What to Contribute                             |
 | ----------------------------------------------------------- | ---------------------------------------------- |
 | [OKDP/OKDP](https://github.com/OKDP/OKDP)                   | Project-level docs, governance, roadmap        |
-| [OKDP/okdp-handbook](https://github.com/OKDP/okdp-handbook) | Module docs, install guides, Helm values       |
+| [OKDP/helm-handbook](https://github.com/OKDP/helm-handbook)  | Helm chart install guides and values           |
 | [OKDP/okdp-sandbox](https://github.com/OKDP/okdp-sandbox)   | Sandbox environment                            |
 | OKDP/hive-metastore, spark-history-server, etc.             | Module source code, Helm charts, Docker images |
 

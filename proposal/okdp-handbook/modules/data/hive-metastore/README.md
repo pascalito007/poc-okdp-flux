@@ -1,31 +1,30 @@
-# Hive Metastore
+# Hive Metastore — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-Apache Hive Metastore is a centralized metadata repository for data lakes. It stores table schemas,
-partition information, and data locations, enabling engines like Spark, Trino, and Presto to access
-structured data on object storage (S3, GCS, HDFS).
+The [sandbox.yaml](values/sandbox.yaml) configures Hive Metastore to integrate with the OKDP stack:
 
-In OKDP, Hive Metastore is the shared metadata catalog that connects Trino, Spark, and Superset
-to data stored in SeaweedFS (S3-compatible storage).
+- **PostgreSQL**: connects to the CNPG-managed instance (`postgresql-instance-rw.cnpg-system.svc.cluster.local`)
+  using credentials from secret `creds-hms-db`
+- **S3 Storage**: connects to SeaweedFS (`seaweedfs-seaweedfs-default.okdp.sandbox`)
+  using credentials from secret `creds-hms-s3`, warehouse bucket `hive`
+- **Network policies**: disabled for sandbox simplicity
 
-## Upstream Project
+## Prerequisites (from OKDP infrastructure)
 
-- **Project**: [Apache Hive](https://hive.apache.org/)
-- **Helm Chart**: [OKDP/hive-metastore](https://github.com/OKDP/hive-metastore)
-- **Chart Version**: 1.4.0
-- **App Version**: 4.0.1 (custom OKDP image: `quay.io/okdp/hive-metastore:4.0.1`)
+- PostgreSQL database `hms` (created by okdp-prerequisites manifests)
+- SeaweedFS with `hive` bucket (created by okdp-prerequisites)
+- Secrets: `creds-hms-db` (username/password), `creds-hms-s3` (accessKey/secretKey)
 
-## What This Module Provides in OKDP
+## Service endpoint
 
-- Thrift-based metadata service accessible by Trino and Spark
-- PostgreSQL-backed metadata storage (via CNPG)
-- S3 warehouse integration with SeaweedFS
-- Automatic schema initialization via init job
+```
+thrift://hive-metastore.default.svc.cluster.local:9083
+```
 
-## Key Configuration Areas
+Used by: Trino (Hive connector), Spark (metastore access)
 
-- **Database**: PostgreSQL connection (host, port, database name, credentials)
-- **S3 Storage**: SeaweedFS endpoint, bucket name, access credentials
-- **Service**: Thrift port (9083), replica count
-- **Network Policies**: restrict access to allowed namespaces
+## Official docs
+
+- [OKDP Hive Metastore chart](https://github.com/OKDP/hive-metastore/tree/main/helm/hive-metastore)
+- [Apache Hive](https://hive.apache.org/)

@@ -48,7 +48,7 @@ Overall project governance and coordination.
 ### Technical Decisions
 
 - **Minor changes** (bug fixes, doc updates): 1 maintainer approval
-- **Module documentation** (okdp-handbook): 2 approvals (1 technical + 1 clarity validator)
+- **Module documentation** (helm-handbook): 2 approvals (1 technical + 1 clarity validator)
 - **Architecture changes**: Technical Lead approval required
 - **New components**: Discussion in a dedicated issue, Technical Lead approval
 
@@ -60,9 +60,9 @@ Overall project governance and coordination.
 
 ## Contribution Process
 
-### For Documentation (okdp-handbook)
+### For Documentation (helm-handbook)
 
-1. Pick a task from the [task breakdown](https://github.com/OKDP/okdp-handbook/tree/main/roadmap/)
+1. Pick a task from the [task breakdown](https://github.com/OKDP/helm-handbook/tree/main/roadmap/)
 2. Create a branch and submit a PR
 3. Two validators must approve:
    - **Technical validator**: verifies correctness (values work, commands are accurate)
@@ -90,7 +90,7 @@ Overall project governance and coordination.
 | Repository                                                  | Purpose                                       | Maintainers        |
 | ----------------------------------------------------------- | --------------------------------------------- | ------------------ |
 | [OKDP/OKDP](https://github.com/OKDP/OKDP)                   | Project root, component inventory, governance | Project Lead       |
-| [OKDP/okdp-handbook](https://github.com/OKDP/okdp-handbook) | Module docs, install guides, values           | All maintainers    |
+| [OKDP/helm-handbook](https://github.com/OKDP/helm-handbook) | Module docs, install guides, values           | All maintainers    |
 | [OKDP/okdp-sandbox](https://github.com/OKDP/okdp-sandbox)   | Sandbox environment (FluxCD)                  | All maintainers    |
 | OKDP/hive-metastore, spark-history-server, etc.             | Individual module repos                       | Module maintainers |
 

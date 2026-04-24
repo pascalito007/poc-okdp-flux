@@ -1,32 +1,27 @@
-# Spark History Server
+# Spark History Server — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-Spark History Server provides a web UI for viewing completed and running Apache Spark applications.
-It reads event logs from S3 storage and displays execution metrics, job timelines, and performance data.
+The [sandbox.yaml](values/sandbox.yaml) configures Spark History Server for OKDP:
 
-In OKDP, Spark History Server is paired with the Spark Web Proxy to provide real-time monitoring
-of running Spark applications alongside historical job data.
+- **S3 event logs**: reads from SeaweedFS `spark-events` bucket via `creds-spark-history-s3`
+- **OIDC auth**: Keycloak-based authentication via okdp-spark-auth-filter
+- **TLS**: CA trust bundle from cert-manager trust-manager (`certs-bundle`)
+- **Admin groups**: `admins` group has access to all jobs
 
-## Upstream Project
+## Prerequisites (from OKDP infrastructure)
 
-- **Project**: [Apache Spark](https://spark.apache.org/)
-- **Helm Chart**: [OKDP/spark-history-server](https://github.com/OKDP/spark-history-server)
-- **Chart Version**: 1.0.0
-- **App Version**: 3.5.6 (custom OKDP image: `quay.io/okdp/spark`)
+- SeaweedFS with `spark-events` bucket
+- Keycloak with OIDC clients configured
+- Secrets: `creds-spark-history-s3`, `creds-oidc`, `certs-bundle`
 
-## What This Module Provides in OKDP
+## Service endpoint
 
-- Web UI for completed Spark job history
-- S3-based event log reading (from SeaweedFS `spark-events` bucket)
-- OIDC authentication via Keycloak (using okdp-spark-auth-filter)
-- Group-based access control (admins see all jobs)
-- Spark Web Proxy for real-time monitoring of running applications
-- Ingress with TLS
+```
+https://spark-history-default.okdp.sandbox
+```
 
-## Key Configuration Areas
+## Official docs
 
-- **Event logs**: S3 endpoint, bucket, credentials for reading Spark event logs
-- **OIDC auth**: Keycloak issuer URI, client credentials, redirect URI
-- **Web Proxy**: optional companion for real-time Spark UI monitoring
-- **Ingress**: TLS-enabled web UI access
+- [OKDP Spark History Server chart](https://github.com/OKDP/spark-history-server)
+- [Apache Spark Monitoring](https://spark.apache.org/docs/latest/monitoring.html)

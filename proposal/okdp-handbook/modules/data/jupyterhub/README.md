@@ -1,35 +1,29 @@
-# JupyterHub
+# JupyterHub — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-JupyterHub is a multi-user server for Jupyter notebooks. It spawns individual notebook servers
-for each user with configurable resource limits and pre-installed kernels.
+The [sandbox.yaml](values/sandbox.yaml) configures JupyterHub for OKDP:
 
-In OKDP, JupyterHub provides interactive data science workspaces with PySpark integration,
-S3 file browsing, and OIDC authentication via Keycloak.
+- **OIDC auth**: Keycloak GenericOAuthenticator via `creds-oidc`
+- **S3 browser**: jupyter-fs connected to SeaweedFS via `creds-jupyter-s3`
+- **PySpark**: Spark-on-K8s client mode with ServiceAccount `spark`
+- **Notebook profiles**: Minimal Python, Scientific, Data Science, PySpark (3.4.4 and 3.5.6)
+- **Welcome notebook**: links to okdp-examples
 
-## Upstream Project
+## Prerequisites (from OKDP infrastructure)
 
-- **Project**: [jupyter.org/hub](https://jupyter.org/hub)
-- **Helm Chart**: [jupyterhub/helm-chart](https://hub.jupyter.org/helm-chart/)
-- **Chart Version**: 4.3.1
-- **App Version**: 5.2.1
+- Keycloak with OIDC clients
+- SeaweedFS accessible
+- Spark Operator + Spark RBAC
+- Secrets: `creds-oidc`, `creds-jupyter-s3`, `creds-examples-s3`
 
-## What This Module Provides in OKDP
+## Service endpoint
 
-- Multi-user Jupyter notebook environment
-- PySpark kernel with Spark-on-K8s integration (client mode)
-- Multiple notebook profiles (Minimal Python, Scientific, Data Science, PySpark)
-- S3 file browser via jupyter-fs (connected to SeaweedFS)
-- OIDC authentication via Keycloak (GenericOAuthenticator)
-- Welcome notebook with OKDP examples link
-- Per-user persistent storage
+```
+https://jupyter-default.okdp.sandbox
+```
 
-## Key Configuration Areas
+## Official docs
 
-- **Authentication**: Keycloak OIDC (GenericOAuthenticator)
-- **Notebook profiles**: image selection, resource limits
-- **Spark integration**: ServiceAccount, executor images, event log config
-- **S3 browser**: SeaweedFS endpoint, credentials
-- **Storage**: PVC per user, storage class
-- **Ingress**: TLS-enabled hub access
+- [JupyterHub Helm chart](https://z2jh.jupyter.org/)
+- [OKDP JupyterLab images](https://github.com/OKDP/jupyterlab-docker)

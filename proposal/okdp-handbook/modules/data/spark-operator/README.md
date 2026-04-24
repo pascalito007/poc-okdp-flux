@@ -1,32 +1,18 @@
-# Spark Operator
+# Spark Operator — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-The Kubeflow Spark Operator is a Kubernetes operator for managing Apache Spark applications.
-It uses Custom Resource Definitions (SparkApplication, ScheduledSparkApplication) to declaratively
-define, submit, and monitor Spark jobs on Kubernetes.
+The [sandbox.yaml](values/sandbox.yaml) configures the Spark Operator for OKDP:
 
-In OKDP, the Spark Operator manages all Spark workloads submitted from JupyterHub notebooks,
-Airflow DAGs, or direct kubectl submissions.
+- **Job namespaces**: all namespaces allowed (empty string)
+- **RBAC**: disabled in chart — created separately via `manifests/spark-rbac.yaml`
+  to allow flexibility across namespaces
+- **Webhook**: enabled for SparkApplication validation/mutation
 
-## Upstream Project
+## Manifests
 
-- **Project**: [kubeflow/spark-operator](https://github.com/kubeflow/spark-operator)
-- **CNCF Status**: Part of Kubeflow (CNCF Incubating)
-- **Helm Chart**: [kubeflow/spark-operator](https://kubeflow.github.io/spark-operator)
-- **Chart Version**: 2.4.0
-- **App Version**: 2.4.0
+- `manifests/spark-rbac.yaml` — ServiceAccount `spark`, Role, RoleBinding in default namespace
 
-## What This Module Provides in OKDP
+## Official docs
 
-- SparkApplication CRD for declarative Spark job management
-- Webhook for validation and mutation of Spark applications
-- Prometheus metrics for Spark job monitoring
-- Multi-namespace support for job execution
-
-## Key Configuration Areas
-
-- **Job namespaces**: which namespaces can run Spark jobs
-- **Webhook**: validation/mutation of SparkApplication resources
-- **Metrics**: Prometheus integration
-- **RBAC**: controller and spark application service accounts
+- [Kubeflow Spark Operator](https://github.com/kubeflow/spark-operator)

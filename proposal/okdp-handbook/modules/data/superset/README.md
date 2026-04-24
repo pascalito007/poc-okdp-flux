@@ -1,35 +1,29 @@
-# Apache Superset
+# Apache Superset — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-Apache Superset is a modern data visualization and exploration platform. It provides interactive
-dashboards, SQL Lab for ad-hoc queries, and a rich set of visualization types.
+The [sandbox.yaml](values/sandbox.yaml) configures Superset for OKDP:
 
-In OKDP, Superset connects to Trino for querying data stored in the Hive/S3 data lake,
-providing business intelligence capabilities to platform users.
+- **PostgreSQL**: connects to CNPG instance for metadata via `creds-superset-db`
+- **OIDC auth**: Keycloak OAuth2 login via `creds-oidc`, role mapping (admins → Admin)
+- **Trino datasource**: pre-configured connection to `trino-default.okdp.sandbox`
+- **Examples**: loads example dashboards from `superset-examples` database
+- **Redis**: built-in Redis cache (no external dependency)
 
-## Upstream Project
+## Prerequisites (from OKDP infrastructure)
 
-- **Project**: [superset.apache.org](https://superset.apache.org/)
-- **Helm Chart**: [OKDP/okdp-superset](https://github.com/OKDP/okdp-superset) (wrapper)
-- **Chart Version**: 0.15.0
-- **App Version**: 4.1.2
+- PostgreSQL databases `superset` and `superset-examples`
+- Keycloak with OIDC clients
+- Trino running (for datasource)
+- Secrets: `creds-superset-db`, `creds-superset-secret-key`, `creds-superset-examples-db`, `creds-redis`, `creds-oidc`
 
-## What This Module Provides in OKDP
+## Service endpoint
 
-- Interactive dashboards and data visualization
-- SQL Lab for ad-hoc Trino queries
-- OAuth2/OIDC authentication via Keycloak
-- Pre-configured Trino datasource
-- Example dashboards (optional, loaded from superset-examples DB)
-- PostgreSQL-backed metadata (via CNPG)
-- Built-in Redis cache
+```
+https://superset-default.okdp.sandbox
+```
 
-## Key Configuration Areas
+## Official docs
 
-- **Database**: PostgreSQL connection for Superset metadata
-- **OIDC auth**: Keycloak OAuth2 configuration
-- **Datasources**: Trino connection for SQL queries
-- **Redis**: cache backend (built-in or external)
-- **Examples**: optional example dashboards loading
-- **Ingress**: TLS-enabled web UI
+- [OKDP Superset chart](https://github.com/OKDP/okdp-superset)
+- [Apache Superset](https://superset.apache.org/)

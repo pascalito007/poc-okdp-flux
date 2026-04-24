@@ -1,89 +1,217 @@
 # OKDP Handbook
 
-Documentation, installation guides, and Helm values for all OKDP platform components.
+Complete installation guide for the OKDP (Open Kubernetes Data Platform).
 
-## Structure
+This handbook documents how to deploy a fully integrated OKDP stack — from infrastructure
+prerequisites to data platform modules — with all components configured to work together.
 
-```
-okdp-handbook/
-├── modules/
-│   ├── infrastructure/                # Infrastructure prerequisites
-│   │   ├── okdp-prerequisites/        # Umbrella chart: deploy all infra in one shot
-│   │   │   ├── Chart.yaml             # Helm umbrella (cert-manager + ingress-nginx + CNPG)
-│   │   │   ├── manifests/             # Post-install: ClusterIssuers, PostgreSQL, secrets
-│   │   │   ├── values/sandbox.yaml
-│   │   │   ├── INSTALL.md
-│   │   │   └── README.md
-│   │   ├── cert-manager/              # Individual module docs + values
-│   │   ├── ingress-nginx/
-│   │   ├── cloudnative-pg/
-│   │   ├── keycloak/
-│   │   └── seaweedfs/
-│   └── data/                          # Data platform components
-│       ├── spark-operator/
-│       ├── spark-history-server/
-│       ├── hive-metastore/
-│       ├── trino/
-│       ├── superset/
-│       ├── jupyterhub/
-│       ├── airflow/
-│       └── okdp-examples/
-├── CONTRIBUTING.md
-└── README.md
-```
+> This is NOT a collection of individual Helm chart installation guides.
+> Each module's official documentation covers that. This handbook documents the **OKDP-specific
+> integration**: how to configure each component so it connects to the others (auth, storage,
+> networking, metadata).
 
-## Two Ways to Install
+## Prerequisites
 
-### Option A: All infrastructure at once (umbrella chart)
+- Kubernetes cluster 1.28+
+- Helm 3.x
+- kubectl
+
+## Full Installation Guide
+
+### Phase 1: Infrastructure Prerequisites
+
+Deploy all infrastructure in one shot using the umbrella chart:
 
 ```bash
-cd modules/infrastructure/okdp-prerequisites
+cd modules/prerequisites
 helm dependency build
-helm install okdp-prerequisites . -n okdp-system --create-namespace -f values/sandbox.yaml
-# Then apply post-install manifests (see INSTALL.md)
+helm install okdp-prerequisites . \
+  --namespace okdp-system --create-namespace \
+  -f values/sandbox.yaml \
+  --wait --timeout 15m
 ```
 
-### Option B: Module by module
+This installs:
 
-Follow each module's `INSTALL.md` individually, in dependency order.
+- **cert-manager** — TLS certificate management
+- **ingress-nginx** — HTTP/HTTPS routing (NodePort 30080/30443 for Kind)
+- **CloudNativePG** — PostgreSQL operator
+- **Keycloak** — Identity provider (OIDC)
+- **SeaweedFS** — S3-compatible object storage
 
-## Module Inventory
+#### Post-install: Create ClusterIssuers and CA
 
-### Infrastructure
-
-| Module                                                           | Chart          | Version | Description                   |
-| ---------------------------------------------------------------- | -------------- | ------- | ----------------------------- |
-| [okdp-prerequisites](modules/infrastructure/okdp-prerequisites/) | umbrella       | 1.0.0   | All infra in one shot         |
-| [cert-manager](modules/infrastructure/cert-manager/)             | cert-manager   | v1.17.1 | TLS certificate management    |
-| [ingress-nginx](modules/infrastructure/ingress-nginx/)           | ingress-nginx  | 4.12.1  | HTTP/HTTPS ingress controller |
-| [cloudnative-pg](modules/infrastructure/cloudnative-pg/)         | cloudnative-pg | 0.23.0  | PostgreSQL operator           |
-| [keycloak](modules/infrastructure/keycloak/)                     | keycloakx      | 2.5.1   | Identity & access management  |
-| [seaweedfs](modules/infrastructure/seaweedfs/)                   | seaweedfs      | 4.0.407 | S3-compatible object storage  |
-
-### Data Platform
-
-| Module                                                     | Chart                | Version | Description                  |
-| ---------------------------------------------------------- | -------------------- | ------- | ---------------------------- |
-| [spark-operator](modules/data/spark-operator/)             | spark-operator       | 2.4.0   | Spark application lifecycle  |
-| [spark-history-server](modules/data/spark-history-server/) | spark-history-server | 1.0.0   | Spark job monitoring UI      |
-| [hive-metastore](modules/data/hive-metastore/)             | hive-metastore       | 1.4.0   | Centralized metadata catalog |
-| [trino](modules/data/trino/)                               | trino                | v1.39.1 | Distributed SQL query engine |
-| [superset](modules/data/superset/)                         | superset             | 0.15.0  | Data visualization & BI      |
-| [jupyterhub](modules/data/jupyterhub/)                     | jupyterhub           | 4.3.1   | Interactive notebooks        |
-| [airflow](modules/data/airflow/)                           | airflow              | 1.17.0  | Workflow orchestration       |
-| [okdp-examples](modules/data/okdp-examples/)               | okdp-examples        | 1.1.0   | Hands-on examples            |
-
-## Installation Order
-
+```bash
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cert-manager \
+  -n okdp-system --timeout=300s
+kubectl apply -f modules/prerequisites/manifests/cert-manager-issuers.yaml
 ```
-Phase 1 — Infrastructure (or use okdp-prerequisites umbrella chart)
-  1. cert-manager  →  2. ingress-nginx  →  3. cloudnative-pg + PostgreSQL
-  4. keycloak  →  5. seaweedfs
 
-Phase 2 — Data Platform (install individually per need)
-  6. spark-operator  →  7. spark-history-server  →  8. hive-metastore
-  9. trino  →  10. superset  →  11. jupyterhub  →  12. airflow
-  13. okdp-examples (optional)
+#### Post-install: Create PostgreSQL cluster and databases
+
+```bash
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg \
+  -n okdp-system --timeout=300s
+kubectl apply -f modules/prerequisites/manifests/cnpg-cluster.yaml
+sleep 30
+kubectl wait --for=condition=ready pod -l cnpg.io/cluster=postgresql-instance \
+  -n cnpg-system --timeout=300s
+```
+
+#### Post-install: Create credential secrets
+
+```bash
+kubectl apply -f modules/prerequisites/manifests/secrets.yaml
+```
+
+#### Post-install: Configure Keycloak realm
+
+Access Keycloak at `https://keycloak.okdp.sandbox` (admin/admin) and configure:
+
+- OIDC clients: `public-oidc-client` (public) and `confidential-oidc-client` (secret: `secret1`)
+- Groups scope with role-to-groups protocol mapper
+- Test users: usera/usera (teama), userb/userb (teamb), adm/adm (admins)
+
+See [modules/prerequisites/](modules/prerequisites/) for detailed realm configuration.
+
+#### Verify infrastructure
+
+```bash
+kubectl get clusterissuers                    # default-issuer READY=True
+kubectl get ingressclass                      # nginx
+kubectl get clusters -n cnpg-system           # postgresql-instance healthy
+kubectl get pods -l app.kubernetes.io/name=keycloakx  # Running
+kubectl get pods -l app.kubernetes.io/name=seaweedfs  # master, volume, filer Running
+```
+
+---
+
+### Phase 2: Data Platform Modules
+
+Install each data module using its OKDP-specific values. These values configure the module
+to integrate with the infrastructure deployed in Phase 1 (database, S3, OIDC, ingress, TLS).
+
+#### Spark Operator
+
+```bash
+helm repo add spark-operator https://kubeflow.github.io/spark-operator
+helm install spark-operator spark-operator/spark-operator \
+  --namespace spark-operator --create-namespace \
+  --version 2.4.0 \
+  -f modules/data/spark-operator/values/sandbox.yaml
+
+# Create Spark RBAC
+kubectl apply -f modules/data/spark-operator/manifests/spark-rbac.yaml
+```
+
+#### Hive Metastore
+
+```bash
+helm install hive-metastore oci://quay.io/okdp/charts/hive-metastore \
+  --version 1.4.0 \
+  -f modules/data/hive-metastore/values/sandbox.yaml
+```
+
+#### Spark History Server
+
+```bash
+helm install spark-history-server oci://quay.io/okdp/charts/spark-history-server \
+  --version 1.0.0 \
+  -f modules/data/spark-history-server/values/sandbox.yaml
+```
+
+#### Trino
+
+```bash
+helm repo add trinodb https://trinodb.github.io/charts/
+helm install trinodb trinodb/trino \
+  --version v1.39.1 \
+  -f modules/data/trino/values/sandbox.yaml
+```
+
+#### Apache Superset
+
+```bash
+helm install superset oci://quay.io/okdp/charts/superset \
+  --version 0.15.0 \
+  -f modules/data/superset/values/sandbox.yaml
+```
+
+#### JupyterHub
+
+```bash
+helm repo add jupyterhub https://hub.jupyter.org/helm-chart/
+helm install jupyterhub jupyterhub/jupyterhub \
+  --version 4.3.1 \
+  -f modules/data/jupyterhub/values/sandbox.yaml
+```
+
+#### Apache Airflow
+
+```bash
+helm repo add apache-airflow https://airflow.apache.org
+helm install airflow apache-airflow/airflow \
+  --version 1.17.0 \
+  -f modules/data/airflow/values/sandbox.yaml
+```
+
+#### OKDP Examples (optional)
+
+```bash
+helm install okdp-examples oci://quay.io/okdp/charts/okdp-examples \
+  --version 1.1.0 \
+  -f modules/data/okdp-examples/values/sandbox.yaml
+```
+
+---
+
+### Phase 3: Verify the Platform
+
+```bash
+# All pods running
+kubectl get pods --all-namespaces | grep -v Running | grep -v Completed
+
+# Access services
+# Keycloak:       https://keycloak.okdp.sandbox          (admin/admin)
+# Airflow:        https://airflow-default.okdp.sandbox    (admin/admin)
+# Superset:       https://superset-default.okdp.sandbox   (via Keycloak: adm/adm)
+# JupyterHub:     https://jupyter-default.okdp.sandbox    (via Keycloak: adm/adm)
+# Spark History:  https://spark-history-default.okdp.sandbox (via Keycloak)
+# Trino:          https://trino-default.okdp.sandbox      (via Keycloak)
+# SeaweedFS:      https://seaweedfs-seaweedfs-default.okdp.sandbox (admin/admin123)
+```
+
+---
+
+## Module Values Reference
+
+Each module folder contains the OKDP-specific Helm values that configure the module
+for integration with the rest of the platform. These are NOT generic values — they contain
+the specific endpoints, credentials, and settings that make the module work within OKDP.
+
+| Module                                                     | Values                                                                | What's OKDP-specific                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [prerequisites](modules/prerequisites/)                    | [sandbox.yaml](modules/prerequisites/values/sandbox.yaml)             | All infra: cert-manager, ingress, CNPG, Keycloak, SeaweedFS |
+| [spark-operator](modules/data/spark-operator/)             | [sandbox.yaml](modules/data/spark-operator/values/sandbox.yaml)       | Webhook, namespaces, RBAC                                   |
+| [spark-history-server](modules/data/spark-history-server/) | [sandbox.yaml](modules/data/spark-history-server/values/sandbox.yaml) | S3 event logs, OIDC auth, ingress                           |
+| [hive-metastore](modules/data/hive-metastore/)             | [sandbox.yaml](modules/data/hive-metastore/values/sandbox.yaml)       | PostgreSQL + S3 connection                                  |
+| [trino](modules/data/trino/)                               | [sandbox.yaml](modules/data/trino/values/sandbox.yaml)                | Hive connector, S3, OIDC, TLS                               |
+| [superset](modules/data/superset/)                         | [sandbox.yaml](modules/data/superset/values/sandbox.yaml)             | PostgreSQL, OIDC, Trino datasource                          |
+| [jupyterhub](modules/data/jupyterhub/)                     | [sandbox.yaml](modules/data/jupyterhub/values/sandbox.yaml)           | OIDC, S3 browser, Spark profiles                            |
+| [airflow](modules/data/airflow/)                           | [sandbox.yaml](modules/data/airflow/values/sandbox.yaml)              | PostgreSQL, DAG sync, ingress                               |
+| [okdp-examples](modules/data/okdp-examples/)               | [sandbox.yaml](modules/data/okdp-examples/values/sandbox.yaml)        | S3 endpoint, Trino endpoint                                 |
+
+## Uninstall
+
+```bash
+# Data platform (reverse order)
+helm uninstall okdp-examples airflow jupyterhub superset trinodb \
+  spark-history-server hive-metastore spark-operator 2>/dev/null
+
+# Infrastructure
+kubectl delete cluster postgresql-instance -n cnpg-system 2>/dev/null
+kubectl delete clusterissuer default-issuer selfsigned-bootstrap 2>/dev/null
+helm uninstall okdp-prerequisites -n okdp-system
 ```
 
 ## Contributing

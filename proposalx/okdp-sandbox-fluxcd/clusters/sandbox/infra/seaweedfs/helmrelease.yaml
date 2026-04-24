@@ -1,0 +1,104 @@
+# SeaweedFS HelmRelease
+# Deployed by role-storage Kustomization
+# Variables substituted by postBuild from cluster-vars and storage-vars
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: seaweedfs
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: seaweedfs
+      version: "4.0.407"
+      sourceRef:
+        kind: HelmRepository
+        name: seaweedfs
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    global:
+      imageName: chrislusf/seaweedfs
+
+    master:
+      enabled: true
+      replicas: 1
+      data:
+        type: "persistentVolumeClaim"
+        storageClass: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+        size: "1Gi"
+      logs:
+        type: "persistentVolumeClaim"
+        storageClass: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+        size: "0.5Gi"
+
+    volume:
+      enabled: true
+      replicas: 1
+      dataDirs:
+        - name: data
+          type: "persistentVolumeClaim"
+          storageClass: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+          size: "2Gi"
+          maxVolumes: 0
+
+    filer:
+      enabled: true
+      replicas: 1
+      enablePVC: true
+      port: 8888
+      data:
+        type: "persistentVolumeClaim"
+        storageClass: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+        size: "0.5Gi"
+      logs:
+        type: "persistentVolumeClaim"
+        storageClass: "${OKDP_STORAGE_CLASS_WORKSPACE}"
+        size: "0.5Gi"
+      s3:
+        enabled: true
+        enableAuth: true
+        existingConfigSecret: creds-seaweedfs-secret
+        createBuckets:
+          - name: ${OKDP_HMS_S3_BUCKET}
+            anonymousRead: true
+          - name: ${OKDP_SPARK_EVENTS_BUCKET}
+            anonymousRead: true
+      ingress:
+        enabled: true
+        className: ${OKDP_INGRESS_CLASS}
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+          cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+          nginx.ingress.kubernetes.io/auth-type: basic
+          nginx.ingress.kubernetes.io/auth-secret: auth-user-secret
+          nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+        host: "seaweedfs-seaweedfs-console-default.${OKDP_INGRESS_SUFFIX}"
+        path: "/"
+        pathType: Prefix
+        tls:
+          - secretName: seaweedfs-filer-tls
+            hosts:
+              - "seaweedfs-seaweedfs-console-default.${OKDP_INGRESS_SUFFIX}"
+
+    s3:
+      enabled: false
+      ingress:
+        enabled: true
+        className: ${OKDP_INGRESS_CLASS}
+        annotations:
+          nginx.ingress.kubernetes.io/proxy-body-size: "130m"
+          cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+        host: "seaweedfs-seaweedfs-default.${OKDP_INGRESS_SUFFIX}"
+        tls:
+          - secretName: seaweedfs-s3-tls
+            hosts:
+              - "seaweedfs-seaweedfs-default.${OKDP_INGRESS_SUFFIX}"

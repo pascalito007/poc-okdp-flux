@@ -1,27 +1,19 @@
-# OKDP Examples
+# OKDP Examples — OKDP Integration
 
-## Overview
+## What's OKDP-specific in the values
 
-A collection of hands-on examples, helper utilities, Jupyter notebooks, and data workflows
-that showcase how to work with the OKDP Platform.
+The [sandbox.yaml](values/sandbox.yaml) configures OKDP Examples:
 
-## Upstream Project
+- **S3**: uploads datasets to SeaweedFS via `creds-examples-s3`
+- **Trino**: connects to `trino-default.okdp.sandbox` for SQL examples
+- **Dataset**: NYC taxi data from public source
 
-- **Project**: [OKDP/okdp-examples](https://github.com/OKDP/okdp-examples)
-- **Helm Chart**: OCI artifact `oci://quay.io/okdp/charts/okdp-examples`
-- **Chart Version**: 1.1.0
-- **App Version**: 1.0.0
+## Prerequisites (from OKDP infrastructure)
 
-## What This Module Provides in OKDP
+- SeaweedFS accessible
+- Trino running
+- Secret: `creds-examples-s3`
 
-- Automated dataset download and upload to S3 (NYC taxi data)
-- Trino SQL examples for creating external tables
-- Jupyter notebooks for interactive data analysis
-- End-to-end data pipeline demonstrations
+## Official docs
 
-## Key Configuration Areas
-
-- **S3**: endpoint, bucket, prefix for dataset storage
-- **Trino**: endpoint for SQL queries
-- **Spark**: event log directory
-- **Proxy**: optional HTTP/HTTPS proxy for dataset downloads
+- [OKDP Examples](https://github.com/OKDP/okdp-examples)
