@@ -5,9 +5,9 @@
 ```
 proposal/
 ├── okdp-root-repo/            # Besoin 1: Component inventory + governance (for OKDP/OKDP repo)
-│   ├── docs/README.md         # Component inventory with links to okdp-handbook
+│   ├── docs/README.md         # Component inventory with links to helm-handbook
 │   └── GOVERNANCE.md          # Project governance, roles, contribution process
-├── okdp-handbook/             # Besoin 2: Module docs + values + umbrella chart
+├── helm-handbook/             # Besoin 2: Module docs + values + umbrella chart
 │   └── modules/
 │       ├── infrastructure/    # Infra docs + okdp-prerequisites umbrella chart
 │       └── data/              # Data platform module docs + values
@@ -17,7 +17,7 @@ proposal/
 
 ## What Changed (Tech Lead Feedback)
 
-- **Besoin 1** = Component inventory at `OKDP/OKDP` repo root (not in okdp-handbook)
-- **Besoin 2** = Module documentation + values in `okdp-handbook` (not stack scripts)
+- **Besoin 1** = Component inventory at `OKDP/OKDP` repo root (not in helm-handbook)
+- **Besoin 2** = Module documentation + values in `helm-handbook` (not stack scripts)
 - **Stack scripts removed** — replaced by infrastructure umbrella chart (meta chart)
 - **Governance added** — GOVERNANCE.md for the OKDP project

@@ -4,7 +4,7 @@
 
 ## Issue 2.0
 
-**Title**: [Besoin 2] Create okdp-handbook repository with structure and templates
+**Title**: [Besoin 2] Create helm-handbook repository with structure and templates
 
 **Labels**: `besoin-2`, `documentation`
 
@@ -12,7 +12,7 @@
 
 ### Description
 
-Create the `okdp-handbook` GitHub repository under the OKDP org with the folder structure,
+Create the `helm-handbook` GitHub repository under the OKDP org with the folder structure,
 standard open-source files, and documentation templates.
 
 ### Deliverables
@@ -420,7 +420,7 @@ per-service credentials, and bucket creation.
 
 ## Issue 2.15
 
-**Title**: [Besoin 2] End-to-end validation of okdp-handbook
+**Title**: [Besoin 2] End-to-end validation of helm-handbook
 
 **Labels**: `besoin-2`, `e2e-testing`
 

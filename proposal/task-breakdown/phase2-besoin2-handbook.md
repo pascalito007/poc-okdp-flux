@@ -1,14 +1,14 @@
-# Phase 2 — Besoin 2: Module Documentation & Install Guides (okdp-handbook)
+# Phase 2 — Besoin 2: Module Documentation & Install Guides (helm-handbook)
 
 ## Objective
 
-Create the `okdp-handbook` repository with standardized documentation, install guides,
+Create the `helm-handbook` repository with standardized documentation, install guides,
 and Helm values for each OKDP module. This includes the infrastructure umbrella chart
 (meta chart) for deploying all prerequisites in one shot.
 
 ## Tasks
 
-### Task 2.0: Create okdp-handbook repository
+### Task 2.0: Create helm-handbook repository
 
 **What**: Create the repo with folder structure, CONTRIBUTING.md, README.md.
 

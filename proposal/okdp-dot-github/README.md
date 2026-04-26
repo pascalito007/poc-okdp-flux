@@ -1,4 +1,4 @@
-# OKDP — Default Community Health Files
+# OKDP: Default Community Health Files
 
 This repository contains the default community health files for the [OKDP](https://github.com/OKDP) organization.
 
@@ -20,4 +20,4 @@ See [GitHub docs: Creating a default community health file](https://docs.github.
 ## Override
 
 Any OKDP repo can override these defaults by creating its own version of the file.
-For example, `okdp-handbook` has its own `PULL_REQUEST_TEMPLATE.md` with a module-specific checklist.
+For example, `helm-handbook` has its own `PULL_REQUEST_TEMPLATE.md` with a module-specific checklist.

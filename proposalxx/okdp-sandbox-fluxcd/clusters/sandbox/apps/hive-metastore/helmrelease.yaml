@@ -1,0 +1,76 @@
+# Hive Metastore HelmRelease
+# dependsOn: [role-database-server, role-storage]
+# Variables substituted by postBuild from cluster-vars, storage-vars, namespace-vars
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: hive-metastore
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 15m
+  chartRef:
+    kind: OCIRepository
+    name: okdp-hive-metastore
+    namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    image:
+      repository: quay.io/okdp/hive-metastore
+      tag: "4.0.1"
+      pullPolicy: IfNotPresent
+    logLevel: INFO
+    serviceName: hive-metastore
+
+    db:
+      driverRef: org.postgresql.Driver
+      driverName: postgresql
+      host: ${OKDP_DB_HOST}
+      port: ${OKDP_DB_PORT}
+      databaseName: ${OKDP_HMS_DB_NAME}
+      user:
+        name: ~
+        password:
+          secretName: ${OKDP_HMS_DB_CREDS_SECRET}
+          propertyName: password
+
+    extraEnvRaw:
+      - name: HIVEMS_USER
+        valueFrom:
+          secretKeyRef:
+            name: ${OKDP_HMS_DB_CREDS_SECRET}
+            key: username
+      - name: THRIFT_LISTENING_PORT
+        value: "9083"
+
+    cloud_storage: "s3"
+    s3:
+      url: ${OKDP_S3_ENDPOINT}
+      warehouseDirectory: ${OKDP_HMS_S3_BUCKET}
+      accessKey:
+        secretName: ${OKDP_HMS_S3_CREDS_SECRET}
+        propertyName: ${OKDP_HMS_S3_ACCESS_KEY_KEY}
+      secretKey:
+        secretName: ${OKDP_HMS_S3_CREDS_SECRET}
+        propertyName: ${OKDP_HMS_S3_SECRET_KEY_KEY}
+
+    gcs:
+      enabled: false
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1024Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+    networkPolicies:
+      enabled: false

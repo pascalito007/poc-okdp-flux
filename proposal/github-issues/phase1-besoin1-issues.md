@@ -13,7 +13,7 @@
 ### Description
 
 Create/update the README.md in the `OKDP/OKDP` root repo with the component inventory table,
-links to okdp-handbook install guides, and governance documentation.
+links to helm-handbook install guides, and governance documentation.
 
 ### Deliverables
 
@@ -25,7 +25,7 @@ links to okdp-handbook install guides, and governance documentation.
 ### Acceptance Criteria
 
 - [ ] Every OKDP component is listed with description, chart source, repo link, and install guide link
-- [ ] All install guide links point to valid okdp-handbook paths
+- [ ] All install guide links point to valid helm-handbook paths
 - [ ] Governance document defines roles (Contributor, Maintainer, Technical Lead, Project Lead)
 - [ ] Review process is documented (2 validators for docs, 1 for code)
 

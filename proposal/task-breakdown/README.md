@@ -5,7 +5,7 @@
 | Phase | Besoin                                  | Deliverable                                 | Duration   |
 | ----- | --------------------------------------- | ------------------------------------------- | ---------- |
 | 1     | [Besoin 1](phase1-besoin1-inventory.md) | Component inventory at OKDP/OKDP repo       | ~2.5 days  |
-| 2     | [Besoin 2](phase2-besoin2-handbook.md)  | okdp-handbook: module docs + umbrella chart | ~33 days   |
+| 2     | [Besoin 2](phase2-besoin2-handbook.md)  | helm-handbook: module docs + umbrella chart | ~33 days   |
 | 3     | [Besoin 3](phase3-besoin3-fluxcd.md)    | FluxCD-native sandbox refactor              | ~19.5 days |
 
 ## Governance

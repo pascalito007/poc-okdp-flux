@@ -1,0 +1,27 @@
+# Identity-level shared variables
+# Keycloak endpoints, OIDC configuration, client credential references
+# Referenced by apps that need authentication via postBuild.substituteFrom
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-vars
+  namespace: flux-system
+data:
+  # Keycloak
+  OKDP_KEYCLOAK_URL: "https://keycloak.okdp.sandbox"
+  OKDP_KEYCLOAK_REALM: "master"
+  OKDP_KEYCLOAK_ISSUER_URI: "https://keycloak.okdp.sandbox/realms/master"
+  OKDP_KEYCLOAK_AUTH_URL: "https://keycloak.okdp.sandbox/realms/master/protocol/openid-connect"
+
+  # OIDC shared client credentials secret
+  OKDP_OIDC_CREDS_SECRET: "creds-oidc"
+  OKDP_OIDC_CLIENT_ID_KEY: "client_id"
+  OKDP_OIDC_CLIENT_SECRET_KEY: "client_secret"
+
+  # OIDC scope
+  OKDP_OIDC_SCOPE: "openid profile email groups"
+
+  # Keycloak database
+  OKDP_KEYCLOAK_DB_NAME: "keycloak"
+  OKDP_KEYCLOAK_DB_CREDS_SECRET: "creds-keycloak-db"

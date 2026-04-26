@@ -10,13 +10,6 @@ Instead, please use [GitHub's private vulnerability reporting](https://docs.gith
 
 Alternatively, contact the maintainers directly (see the MAINTAINERS file in the relevant repo).
 
-## Response Timeline
-
-- Acknowledgment of report: within 48 hours
-- Estimated fix timeline: within 7 days
-- Notification when fixed: upon release
-- Credit in release notes (unless you prefer anonymity)
-
 ## Supported Versions
 
 Security updates are provided for the latest released version of each OKDP component.

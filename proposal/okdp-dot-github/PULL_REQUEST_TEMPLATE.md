@@ -1,22 +1,35 @@
+<!--
+PR title must follow Conventional Commits: feat: / fix: / docs: / chore: / refactor: …
+For unfinished work, open as a Draft PR.
+-->
+
 ## Description
 
-Brief description of the changes.
+<!-- What changed, and why? -->
 
 ## Related Issue
 
-Fixes #(issue number)
+Fixes #
 
 ## Type of Change
 
 - [ ] Bug fix
 - [ ] New feature
 - [ ] Documentation update
+- [ ] Refactor / chore
 - [ ] Breaking change
+
+<!-- If breaking change, describe the impact and migration path here: -->
+
+## How to Test
+
+<!-- Steps a reviewer can follow to manually verify this change -->
 
 ## Checklist
 
-- [ ] I have read the CONTRIBUTING.md
-- [ ] My changes follow the project's standards
+- [ ] I have read [CONTRIBUTING.md](https://github.com/OKDP/.github/blob/main/CONTRIBUTING.md)
+- [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
 - [ ] I have tested my changes
-- [ ] I have updated documentation if needed
-- [ ] All CI checks pass
+- [ ] Documentation updated if needed
+- [ ] All CI checks pass if configured
+- [ ] If breaking change: migration path described above

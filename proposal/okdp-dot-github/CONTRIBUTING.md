@@ -12,11 +12,9 @@ Thank you for your interest in contributing to OKDP!
 
 ### Contributing Documentation
 
-Helm chart install guides live in the
-[helm-handbook](https://github.com/OKDP/helm-handbook) repository.
-
-See the [helm-handbook CONTRIBUTING.md](https://github.com/OKDP/helm-handbook/blob/main/CONTRIBUTING.md)
-for documentation standards, templates, and review process.
+- Follow the existing page structure and naming conventions
+- Use the provided templates when available
+- Keep guides focused on one component per page
 
 ### Contributing Code
 
@@ -24,17 +22,21 @@ The workflow depends on the visibility of the target repository.
 
 #### Public repositories (open-source contribution)
 
+The default workflow for everyone is fork-based:
+
 1. **Fork** the repository on GitHub
 2. Clone your fork and create a feature branch from `main`
 3. Make your changes
-4. Ensure CI passes (lint, tests, build)
+4. Ensure CI passes, if configured (lint, tests, build)
 5. Submit a Pull Request from your fork to the upstream `main`
+
+> **Maintainers only (urgent/quick fixes):** maintainers may create a branch directly in the upstream repository instead of forking, but only for time-sensitive changes. The fork-based workflow remains the default for all other contributions.
 
 #### Private repositories (internal team contribution)
 
 1. Create a branch **directly from `main`** in the repository (no fork needed)
 2. Make your changes
-3. Ensure CI passes (lint, tests, build)
+3. Ensure CI passes, if configured (lint, tests, build)
 4. Submit a Pull Request to `main`
 
 ### Commit Messages
@@ -50,19 +52,30 @@ chore: bump cert-manager to v1.17.1
 
 ### Pull Request Process
 
-- PRs require at least 1 maintainer approval
-- Documentation PRs (helm-handbook) require 2 approvals (1 technical + 1 clarity)
+- Bug fixes and minor changes require at least 1 maintainer approval (lazy consensus)
+- Feature PRs and documentation PRs are reviewed and approved at the **TOSIT Contributors Meeting**; plan your submissions accordingly
 - All CI checks must pass
-- Keep PRs focused — one change per PR
+- Keep PRs focused, one change per PR
+- Before merge, **squash your commits** into meaningful units and **rebase your branch** on top of the latest `main`. Use `git push --force-with-lease` to update the PR.
+
+## Getting Help
+
+For questions, ideas, or technical discussions, use [OKDP GitHub Discussions](https://github.com/orgs/OKDP/discussions).
 
 ## Repository Map
 
 | Repository                                                  | What to Contribute                             |
 | ----------------------------------------------------------- | ---------------------------------------------- |
 | [OKDP/OKDP](https://github.com/OKDP/OKDP)                   | Project-level docs, governance, roadmap        |
-| [OKDP/helm-handbook](https://github.com/OKDP/helm-handbook)  | Helm chart install guides and values           |
+| [OKDP/helm-handbook](https://github.com/OKDP/helm-handbook) | Helm chart install guides and values           |
 | [OKDP/okdp-sandbox](https://github.com/OKDP/okdp-sandbox)   | Sandbox environment                            |
 | OKDP/hive-metastore, spark-history-server, etc.             | Module source code, Helm charts, Docker images |
+
+## Contributor License Agreement (CLA)
+
+Before your first contribution can be merged, you must sign the OKDP CLA (one-time requirement).
+
+<!-- TODO: add link to CLA signing process once finalized -->
 
 ## Code of Conduct
 

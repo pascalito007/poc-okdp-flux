@@ -1,0 +1,200 @@
+# Trino HelmRelease
+# dependsOn: [app-hive-metastore, role-identity, role-storage, role-ingress]
+# Variables substituted by postBuild
+#
+# Extracted from KuboCD package trinodb.yaml (tag 475.0.0-p01)
+# Upstream chart: trinodb/trino v1.39.1
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: trinodb
+  namespace: default
+spec:
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: trino
+      version: "v1.39.1"
+      sourceRef:
+        kind: HelmRepository
+        name: trinodb
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: trinodb/trino
+      tag: 475
+
+    server:
+      workers: 3
+      node:
+        environment: sandbox
+      config:
+        coordinator: "true"
+        node-scheduler.include-coordinator: "true"
+        discovery-server.enabled: "true"
+        path: /etc/trino
+        https:
+          enabled: true
+          port: 8443
+          keystore:
+            path: "/etc/trino/generated/tls.pem"
+      coordinatorExtraConfig: |
+        http-server.process-forwarded=true
+        web-ui.authentication.type=oauth2
+        http-server.authentication.oauth2.issuer=${OKDP_KEYCLOAK_ISSUER_URI}
+        http-server.authentication.oauth2.client-id=$${ENV:OAUTH_CLIENT_ID}
+        http-server.authentication.oauth2.client-secret=$${ENV:OAUTH_CLIENT_SECRET}
+        http-server.authentication.oauth2.auth-url=${OKDP_KEYCLOAK_ISSUER_URI}/protocol/openid-connect/auth
+        http-server.authentication.oauth2.token-url=${OKDP_KEYCLOAK_ISSUER_URI}/protocol/openid-connect/token
+        http-server.authentication.oauth2.scopes=openid,email,profile,groups
+        deprecated.http-server.authentication.oauth2.groups-field=groups
+
+    catalogs:
+      tpch: |
+        connector.name=tpch
+        tpch.splits-per-node=4
+      tpcds: |
+        connector.name=tpcds
+        tpcds.splits-per-node=4
+      lakehouse: |
+        connector.name=hive
+        hive.metastore.uri=thrift://hive-metastore.default.svc.cluster.local:9083
+        hive.metastore.username=trino
+        hive.non-managed-table-writes-enabled=true
+        fs.native-s3.enabled=true
+        s3.region=us-east-1
+        s3.path-style-access=true
+        s3.endpoint=${OKDP_S3_ENDPOINT}
+        s3.aws-access-key=$${ENV:S3_ACCESS_KEY}
+        s3.aws-secret-key=$${ENV:S3_SECRET_ACCESS}
+
+    envFrom:
+      - secretRef:
+          name: ${OKDP_TRINO_S3_CREDS_SECRET}
+    env:
+      - name: OAUTH_CLIENT_ID
+        valueFrom:
+          secretKeyRef:
+            name: ${OKDP_OIDC_CREDS_SECRET}
+            key: ${OKDP_OIDC_CLIENT_ID_KEY}
+      - name: OAUTH_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: ${OKDP_OIDC_CREDS_SECRET}
+            key: ${OKDP_OIDC_CLIENT_SECRET_KEY}
+
+    coordinator:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "8Gi"
+      additionalVolumes:
+        - name: generated-files
+          emptyDir: {}
+        - name: cacerts
+          secret:
+            secretName: certs-bundle
+        - name: trino-tls
+          secret:
+            secretName: trinodb-tls
+      additionalVolumeMounts:
+        - name: generated-files
+          mountPath: /etc/trino/generated
+          readOnly: false
+        - name: cacerts
+          mountPath: /cacerts
+        - name: trino-tls
+          mountPath: /trino-tls
+      additionalJVMConfig:
+        - "-Djavax.net.ssl.trustStore=/cacerts/bundle.p12"
+        - "-Djavax.net.ssl.trustStorePassword="
+
+    worker:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      additionalVolumes:
+        - name: generated-files
+          emptyDir: {}
+        - name: cacerts
+          secret:
+            secretName: certs-bundle
+        - name: trino-tls
+          secret:
+            secretName: trinodb-tls
+      additionalVolumeMounts:
+        - name: generated-files
+          mountPath: /etc/trino/generated
+          readOnly: false
+        - name: cacerts
+          mountPath: /cacerts
+        - name: trino-tls
+          mountPath: /trino-tls
+      additionalJVMConfig:
+        - "-Djavax.net.ssl.trustStore=/cacerts/bundle.p12"
+        - "-Djavax.net.ssl.trustStorePassword="
+
+    ingress:
+      enabled: true
+      className: ${OKDP_INGRESS_CLASS}
+      annotations:
+        cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+        nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      hosts:
+        - host: "trino-default.${OKDP_INGRESS_SUFFIX}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - hosts:
+            - "trino-default.${OKDP_INGRESS_SUFFIX}"
+          secretName: trinodb-tls
+
+    initContainers:
+      coordinator:
+        - name: init-tls
+          image: busybox:1.36
+          command:
+            [
+              "sh",
+              "-c",
+              "cat /trino-tls/tls.crt /trino-tls/tls.key > /etc/trino/generated/tls.pem",
+            ]
+          volumeMounts:
+            - name: trino-tls
+              mountPath: "/trino-tls"
+            - name: generated-files
+              mountPath: "/etc/trino/generated"
+      worker:
+        - name: init-tls
+          image: busybox:1.36
+          command:
+            [
+              "sh",
+              "-c",
+              "cat /trino-tls/tls.crt /trino-tls/tls.key > /etc/trino/generated/tls.pem",
+            ]
+          volumeMounts:
+            - name: trino-tls
+              mountPath: "/trino-tls"
+            - name: generated-files
+              mountPath: "/etc/trino/generated"
