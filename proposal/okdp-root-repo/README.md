@@ -16,7 +16,7 @@ Modular, sovereign, and community-driven.
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 OKDP is structured around two complementary layers:
 
@@ -25,7 +25,7 @@ OKDP is structured around two complementary layers:
 
 ---
 
-## Data Platform Components
+## 📦 Data Platform Components
 
 | Component       | Description                                                                                                                                       | Helm Chart                                                                                                                         | OKDP Repo                                                                                                                                                                                                                                                      |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ OKDP is structured around two complementary layers:
 | JupyterHub      | Multi-user interactive notebook environment with PySpark integration, S3 file browsing, and OIDC authentication                                   | [jupyterhub](https://hub.jupyter.org/helm-chart/)                                                                                  | [jupyterlab-docker](https://github.com/OKDP/jupyterlab-docker)                                                                                                                                                                                                 |
 | OKDP Examples   | Hands-on examples, Jupyter notebooks, and data workflows showcasing the OKDP platform end-to-end                                                  | [okdp-examples](https://github.com/OKDP/okdp-examples)                                                                             | [okdp-examples](https://github.com/OKDP/okdp-examples)                                                                                                                                                                                                         |
 
-## Infrastructure Prerequisites
+## ⚙️ Infrastructure Prerequisites
 
 | Component     | Description                                                            | Helm Chart                                                         |
 | ------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -49,7 +49,7 @@ OKDP is structured around two complementary layers:
 
 > To deploy all infrastructure prerequisites at once, use the [okdp-prerequisites umbrella chart](https://github.com/OKDP/helm-handbook/tree/main/modules/prerequisites/okdp-prerequisites).
 
-## Control Plane
+## 🎛️ Control Plane
 
 The OKDP Control Plane provides a unified interface to deploy, configure, and monitor all platform components across one or multiple Kubernetes clusters.
 
@@ -62,7 +62,7 @@ The OKDP Control Plane provides a unified interface to deploy, configure, and mo
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Option 1: Sandbox (recommended)
 
@@ -81,29 +81,29 @@ Deploy components individually on your own cluster using the Helm-based install 
 
 ---
 
-## Community & TOSIT
+## 🤝 Community & TOSIT
 
 OKDP is supported by [TOSIT](https://tosit.fr) (The Open Source I Trust), initiated by DGFiP, Orange, and other organizations. The goal is a sovereign, powerful, and fully open-source data stack accessible to everyone.
 
-- **Website**: [okdp.io](https://okdp.io)
-- **Discussions**: [Mattermost OKDP (TOSIT)](https://framateam.org/tosit/channels/okdp)
-- **Weekly technical meeting**: Every Wednesday at 10:00 CET
-- **Docker images**: [Quay.io/okdp](https://quay.io/organization/okdp)
-- **Java artifacts**: [Maven Central (io.okdp)](https://central.sonatype.com/namespace/io.okdp)
-- **Contribute**: [okdp.io#community](https://okdp.io#community)
+- 🌐 **Website**: [okdp.io](https://okdp.io)
+- 💬 **Discussions**: [Mattermost OKDP (TOSIT)](https://framateam.org/tosit/channels/okdp)
+- 📅 **Weekly technical meeting**: Every Wednesday at 10:00 CET
+- 🐳 **Docker images**: [Quay.io/okdp](https://quay.io/organization/okdp)
+- ☕ **Java artifacts**: [Maven Central (io.okdp)](https://central.sonatype.com/namespace/io.okdp)
+- 🤝 **Contribute**: [okdp.io#community](https://okdp.io#community)
 
-## Roadmap
+## 🗺️ Roadmap
 
 See the [official roadmap](https://okdp.io/roadmap/) on okdp.io (v1.0.0 planned for June 2026).
 
-## Contributing
+## 🤲 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for documentation standards and review process.
 
-## Governance
+## 🏛️ Governance
 
 See [GOVERNANCE.md](GOVERNANCE.md) for project governance, roles, and decision-making.
 
-## License
+## 📄 License
 
 [Apache License 2.0](./LICENSE)
