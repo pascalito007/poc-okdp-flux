@@ -1,0 +1,63 @@
+name: Documentation Issue
+description: Report missing, outdated, or unclear documentation
+labels: ["documentation"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component's documentation is affected?
+      options:
+        - okdp-server / okdp-ui (Control Plane)
+        - okdp-sandbox
+        - spark-images
+        - spark-history-server
+        - spark-web-proxy
+        - okdp-spark-auth-filter
+        - hive-metastore
+        - okdp-superset
+        - jupyterlab-docker
+        - okdp-examples
+        - okdp.io (website)
+        - gh-workflows
+        - OKDP/OKDP (governance / docs)
+        - .github (org-wide templates)
+        - Other / Multiple
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Where is the documentation?
+      description: Link to the page, file, or section that has the issue.
+      placeholder: "e.g. https://github.com/OKDP/okdp-sandbox/blob/main/README.md#installation"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Issue Type
+      options:
+        - Missing documentation
+        - Outdated / incorrect content
+        - Unclear or confusing explanation
+        - Broken link
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Problem
+      description: What is wrong or missing? Be as specific as possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Fix
+      description: If you have a suggestion for what the documentation should say, add it here.

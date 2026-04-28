@@ -1,0 +1,65 @@
+# Hive Metastore values for OKDP Sandbox
+# Chart: oci://quay.io/okdp/charts/hive-metastore 1.4.0
+#
+# Requires:
+#   - PostgreSQL database "hms" on postgresql-instance-rw.cnpg-system.svc.cluster.local:5432
+#   - Secret "creds-hms-db" with keys: username, password
+#   - Secret "creds-hms-s3" with keys: accessKey, secretKey
+#   - SeaweedFS S3 endpoint accessible
+
+replicaCount: 1
+
+image:
+  repository: quay.io/okdp/hive-metastore
+  tag: "4.0.1"
+  pullPolicy: IfNotPresent
+
+logLevel: INFO
+
+# PostgreSQL connection
+db:
+  driverRef: org.postgresql.Driver
+  driverName: postgresql
+  host: postgresql-instance-rw.cnpg-system.svc.cluster.local
+  port: 5432
+  databaseName: hms
+  user:
+    name: ~ # loaded from secret via extraEnvRaw
+    password:
+      secretName: creds-hms-db
+      propertyName: password
+
+# Load username from secret
+extraEnvRaw:
+  - name: HIVEMS_USER
+    valueFrom:
+      secretKeyRef:
+        name: creds-hms-db
+        key: username
+
+# S3 storage (SeaweedFS)
+cloud_storage: "s3"
+s3:
+  # Adjust the URL to match your SeaweedFS S3 endpoint
+  url: https://seaweedfs-seaweedfs-default.okdp.sandbox
+  warehouseDirectory: hive
+  accessKey:
+    secretName: creds-hms-s3
+    propertyName: accessKey
+  secretKey:
+    secretName: creds-hms-s3
+    propertyName: secretKey
+
+gcs:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 1024Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+networkPolicies:
+  enabled: false # Disabled for sandbox simplicity

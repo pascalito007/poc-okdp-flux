@@ -1,0 +1,68 @@
+# Keycloak HelmRelease
+# Deployed by role-identity Kustomization
+# Variables substituted by postBuild from cluster-vars and identity-vars
+#
+# Note: The KuboCD keycloak package (tag 24.4.11-p07) wraps a Keycloak chart
+# with realm provisioning (users, groups, roles, OIDC clients).
+# For the FluxCD-native version, realm provisioning is handled separately
+# via Keycloak's realm import feature or post-install configuration.
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: keycloakx
+      version: "2.5.1"
+      sourceRef:
+        kind: HelmRepository
+        name: codecentric
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicas: 1
+
+    database:
+      vendor: postgres
+      hostname: ${OKDP_DB_HOST}
+      port: ${OKDP_DB_PORT}
+      database: ${OKDP_KEYCLOAK_DB_NAME}
+      existingSecret: ${OKDP_KEYCLOAK_DB_CREDS_SECRET}
+      existingSecretKey: password
+
+    http:
+      relativePath: "/"
+
+    ingress:
+      enabled: true
+      ingressClassName: ${OKDP_INGRESS_CLASS}
+      annotations:
+        cert-manager.io/cluster-issuer: "${OKDP_CLUSTER_ISSUER}"
+      rules:
+        - host: "keycloak.${OKDP_INGRESS_SUFFIX}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - hosts:
+            - "keycloak.${OKDP_INGRESS_SUFFIX}"
+          secretName: keycloak-tls
+
+    command:
+      - "/opt/keycloak/bin/kc.sh"
+      - "start"
+      - "--hostname=keycloak.${OKDP_INGRESS_SUFFIX}"
+      - "--hostname-strict=false"
+      - "--http-enabled=true"
+      - "--proxy=edge"

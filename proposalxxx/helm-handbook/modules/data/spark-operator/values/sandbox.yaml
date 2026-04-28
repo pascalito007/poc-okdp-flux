@@ -1,0 +1,36 @@
+# Spark Operator values for OKDP Sandbox
+# Chart: spark-operator/spark-operator 2.4.0
+
+# Disable CRD upgrade hook (CRDs installed with chart)
+hook:
+  upgradeCrd: false
+
+# Prometheus metrics
+prometheus:
+  metrics:
+    enable: true
+  podMonitor:
+    create: false
+
+# Controller configuration
+controller:
+  rbac:
+    createRole: true
+  podSecurityContext:
+    fsGroup: null
+
+# Webhook for SparkApplication validation/mutation
+webhook:
+  enable: true
+  podSecurityContext:
+    fsGroup: null
+
+# Spark application configuration
+spark:
+  # Allow Spark jobs in all namespaces (empty string = all)
+  jobNamespaces:
+    - ""
+  serviceAccount:
+    create: false # We create it separately for flexibility
+  rbac:
+    create: false # We create it separately for flexibility
