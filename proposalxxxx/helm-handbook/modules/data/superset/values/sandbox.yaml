@@ -1,0 +1,176 @@
+# Apache Superset values for OKDP Sandbox
+# Chart: oci://quay.io/okdp/charts/superset 0.15.0
+#
+# This is the OKDP wrapper chart around Apache Superset.
+# Requires:
+#   - Secret "creds-superset-db" with keys: username, password
+#   - Secret "creds-superset-secret-key" with key: superset_secret_key
+#   - Secret "creds-superset-examples-db" with keys: username, password
+#   - Secret "creds-redis" with keys: username, password
+#   - Secret "creds-oidc" with keys: client_id, client_secret
+#   - PostgreSQL databases "superset" and "superset-examples"
+#   - Keycloak OIDC endpoint accessible
+#   - Trino endpoint accessible
+
+okdp:
+  superset:
+    superset_secret_key: ~
+    extra_config: &extra_config |
+      from datetime import timedelta
+      PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+      ENABLE_PROXY_FIX = True
+    feature_flags: &feature_flags |
+      FEATURE_FLAGS = {
+        "DASHBOARD_RBAC": True,
+        "EMBEDDED_SUPERSET": True,
+        "EMBEDDABLE_CHARTS": True,
+        "ENABLE_TEMPLATE_PROCESSING": True,
+        "DASHBOARD_NATIVE_FILTERS": True,
+        "DASHBOARD_CROSS_FILTERS": True,
+      }
+    load_examples:
+      enabled: true
+      jdbc_uri: "postgresql+psycopg2://$DB_EXAMPLES_USER:$DB_EXAMPLES_PASS@$DB_EXAMPLES_HOST:$DB_EXAMPLES_PORT/$DB_EXAMPLES_NAME?options=-csearch_path%3Dmain"
+
+  oauth:
+    enabled: true
+    provider: "keycloak"
+    base_url: "https://keycloak.okdp.sandbox:443/realms/master/protocol/openid-connect"
+    scope: "openid profile email groups"
+    use_pkce: true
+    ssl_certificate_verify: "False"
+    auth_registration: &auth_registration |
+      AUTH_USER_REGISTRATION = True
+      AUTH_ROLE_PUBLIC = "Public"
+      AUTH_USER_REGISTRATION_ROLE = "Public"
+      AUTH_ROLES_SYNC_AT_LOGIN = True
+    oauth2_superset_roles_mapping: &oauth2_superset_roles_mapping |
+      AUTH_ROLES_MAPPING = {
+        "admins": ["Admin"]
+      }
+
+superset:
+  extraConfigs:
+    import_datasources.yaml: |
+      databases:
+      - database_name: trino
+        sqlalchemy_uri: "trino://trino@trino-default.okdp.sandbox:443/lakehouse/nyc_tripdata?http_scheme=https&verify=false"
+        extra: |
+          {
+            "engine_params": {},
+            "metadata_params": {},
+            "connect_args": {
+              "http_scheme": "https",
+              "verify": false
+            },
+            "metadata_cache_timeout": {},
+            "schemas_allowed_for_file_upload": []
+          }
+        allow_run_async: true
+        allow_dml: true
+        allow_ctas: true
+        allow_cvas: true
+        expose_in_sqllab: true
+
+  postgresql:
+    enabled: false
+
+  redis:
+    enabled: true
+    architecture: standalone
+    auth:
+      enabled: false
+
+  extraEnvRaw:
+    - name: SUPERSET_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: creds-superset-secret-key
+          key: superset_secret_key
+    - name: DB_USER
+      valueFrom:
+        secretKeyRef:
+          name: creds-superset-db
+          key: username
+    - name: DB_PASS
+      valueFrom:
+        secretKeyRef:
+          name: creds-superset-db
+          key: password
+    - name: REDIS_USER
+      valueFrom:
+        secretKeyRef:
+          name: creds-redis
+          key: username
+    - name: REDIS_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: creds-redis
+          key: password
+    - name: AUTH_OAUTH_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: creds-oidc
+          key: client_id
+    - name: AUTH_OAUTH_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: creds-oidc
+          key: client_secret
+    - name: DB_EXAMPLES_HOST
+      value: postgresql-instance-rw.cnpg-system.svc.cluster.local
+    - name: DB_EXAMPLES_PORT
+      value: "5432"
+    - name: DB_EXAMPLES_NAME
+      value: superset-examples
+    - name: DB_EXAMPLES_USER
+      valueFrom:
+        secretKeyRef:
+          name: creds-superset-examples-db
+          key: username
+    - name: DB_EXAMPLES_PASS
+      valueFrom:
+        secretKeyRef:
+          name: creds-superset-examples-db
+          key: password
+
+  supersetNode:
+    connections:
+      db_host: "postgresql-instance-rw.cnpg-system.svc.cluster.local"
+      db_port: "5432"
+      db_name: superset
+      db_user: ~
+      db_pass: ~
+      redis_host: "superset-main-redis-headless"
+      redis_port: 6379
+      redis_user: ~
+      redis_password: ~
+      redis_cache_db: "1"
+      redis_celery_db: "0"
+      redis_ssl:
+        enabled: false
+        ssl_cert_reqs: CERT_NONE
+
+  ingress:
+    enabled: true
+    ingressClassName: "nginx"
+    annotations:
+      cert-manager.io/cluster-issuer: default-issuer
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    path: /
+    pathType: ImplementationSpecific
+    hosts:
+      - superset-default.okdp.sandbox
+    tls:
+      - hosts:
+          - superset-default.okdp.sandbox
+        secretName: "superset-tls-secret"
+
+  configOverrides:
+    auth_registration: *auth_registration
+    oauth_to_superset_roles_mapping: *oauth2_superset_roles_mapping
+    extra_config: *extra_config
+    feature_flags: *feature_flags

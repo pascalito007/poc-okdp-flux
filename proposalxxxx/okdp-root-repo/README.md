@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/OKDP/OKDP/main/logo/inverted/okdp-inverted.png" alt="OKDP Logo" width="320" />
+<img src="https://raw.githubusercontent.com/OKDP/OKDP/main/logo/main/okdp-main.png" alt="OKDP Logo" width="320" />
 
 # OKDP: Open Kubernetes Data Platform
 
@@ -37,7 +37,17 @@ OKDP is structured around two complementary layers:
 | JupyterHub      | Multi-user interactive notebook environment with PySpark integration, S3 file browsing, and OIDC authentication                                   | [jupyterhub](https://hub.jupyter.org/helm-chart/)                                                                                  | [jupyterlab-docker](https://github.com/OKDP/jupyterlab-docker)                                                                                                                                                                                                 |
 | OKDP Examples   | Hands-on examples, Jupyter notebooks, and data workflows showcasing the OKDP platform end-to-end                                                  | [okdp-examples](https://github.com/OKDP/okdp-examples)                                                                             | [okdp-examples](https://github.com/OKDP/okdp-examples)                                                                                                                                                                                                         |
 
-> For testing purpose, you can deploy all infrastructure prerequisites at once with the [okdp-prerequisites umbrella chart](https://github.com/OKDP/helm-handbook/tree/main/modules/prerequisites/okdp-prerequisites). **Do not use it for production cluster.**
+## ⚙️ Infrastructure Prerequisites
+
+| Component     | Description                                                            | Helm Chart                                                         |
+| ------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| cert-manager  | Kubernetes-native TLS certificate management (CNCF Graduated)          | [jetstack/cert-manager](https://charts.jetstack.io)                |
+| ingress-nginx | NGINX Ingress Controller for HTTP/HTTPS routing                        | [ingress-nginx](https://kubernetes.github.io/ingress-nginx)        |
+| CloudNativePG | PostgreSQL operator for automated cluster management (CNCF Sandbox)    | [cnpg/cloudnative-pg](https://cloudnative-pg.github.io/charts)     |
+| Keycloak      | Identity and access management with OIDC support for all OKDP services | [codecentric/keycloakx](https://codecentric.github.io/helm-charts) |
+| SeaweedFS     | S3-compatible distributed object storage for data lake and event logs  | [seaweedfs/helm](https://seaweedfs.github.io/seaweedfs/helm)       |
+
+> To deploy all infrastructure prerequisites at once, use the [okdp-prerequisites umbrella chart](https://github.com/OKDP/helm-handbook/tree/main/modules/prerequisites/okdp-prerequisites).
 
 ## 🎛️ Control Plane
 
@@ -64,7 +74,10 @@ The fastest way to explore OKDP. Spins up a full, pre-configured platform on [Ki
 
 Deploy components individually on your own cluster using the Helm-based install guides.
 
-See the [helm-handbook](https://github.com/OKDP/helm-handbook) for install guides.
+1. Install infrastructure prerequisites: follow the [okdp-prerequisites guide](https://github.com/OKDP/helm-handbook/tree/main/modules/prerequisites/okdp-prerequisites) or install modules individually
+2. Install the data platform components you need
+
+> To deploy the full stack at once, see the [helm-handbook](https://github.com/OKDP/helm-handbook) main README.
 
 ---
 
@@ -93,4 +106,4 @@ See [GOVERNANCE.md](GOVERNANCE.md) for project governance, roles, and decision-m
 
 ## 📄 License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](./LICENSE)

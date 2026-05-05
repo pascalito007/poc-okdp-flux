@@ -12,15 +12,9 @@ Thank you for your interest in contributing to OKDP!
 
 ### Contributing Documentation
 
-The helm-handbook contains two types of guides:
-
-- **Full-stack deployment guide** (`README.md`): end-to-end installation covering all modules in order
-- **Prerequisites guide** (`modules/prerequisites/README.md`): infrastructure umbrella chart and post-install steps
-
-When contributing:
-- Keep each guide focused on its scope (full-stack or prerequisites)
-- Use the provided PR template
-- Values files must contain real, working values — no placeholders
+- Follow the existing page structure and naming conventions
+- Use the provided templates when available
+- Keep guides focused on one component per page
 
 ### Contributing Code
 
@@ -37,15 +31,6 @@ The default workflow for everyone is fork-based:
 5. Submit a Pull Request from your fork to the upstream `main`
 
 > **Maintainers only (urgent/quick fixes):** maintainers may create a branch directly in the upstream repository instead of forking, but only for time-sensitive changes. The fork-based workflow remains the default for all other contributions.
-
-**Keeping your fork up to date:**
-
-```sh
-git fetch upstream
-git checkout main
-git merge upstream/main
-git push origin main
-```
 
 #### Private repositories (internal team contribution)
 
@@ -67,15 +52,11 @@ chore: bump cert-manager to v1.17.1
 
 ### Pull Request Process
 
-- If your work is still in progress, open a **Draft PR**. This allows early feedback and makes your work visible to the team without triggering a formal review. Convert it to a regular PR when it is ready.
-- All PRs must be linked to an issue. If no relevant issue exists, open one before submitting your PR. Trivial fixes (typos, broken links) may skip this.
 - Bug fixes and minor changes require at least 1 maintainer approval (lazy consensus)
 - Feature PRs and documentation PRs are reviewed and approved at the **TOSIT Contributors Meeting**; plan your submissions accordingly
 - All CI checks must pass
-- Keep PRs focused: one concern per PR. If your PR touches multiple unrelated things, split it.
-- Keep PRs under 500 lines of meaningful changes where possible. If your PR is larger, explain in the description why it cannot be split. Large PRs that are difficult to review may be sent back for splitting.
-- During review, address feedback by adding new commits — do not rewrite history or force-push. This preserves reviewer context.
-- Once your PR is approved, **squash your commits** into meaningful units and **rebase your branch** on top of the latest `main`. Then use `git push --force-with-lease` to update the PR before merge.
+- Keep PRs focused, one change per PR
+- Before merge, **squash your commits** into meaningful units and **rebase your branch** on top of the latest `main`. Use `git push --force-with-lease` to update the PR.
 
 ## Getting Help
 

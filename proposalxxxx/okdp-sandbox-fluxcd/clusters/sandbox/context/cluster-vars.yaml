@@ -1,0 +1,33 @@
+# Cluster-level shared variables
+# Replaces the top-level fields from KuboCD Context CR (ingress, storageClass, certificateIssuers)
+# Referenced by roles via postBuild.substituteFrom
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-vars
+  namespace: flux-system
+data:
+  # Ingress
+  OKDP_INGRESS_SUFFIX: "okdp.sandbox"
+  OKDP_INGRESS_CLASS: "nginx"
+
+  # Certificate issuers
+  OKDP_CLUSTER_ISSUER: "default-issuer"
+  OKDP_CA_COMMON_NAME: "OKDP Sandbox Self-Signed CA"
+  OKDP_CA_ORGANIZATION: "OKDP"
+  OKDP_CA_COUNTRY: "FR"
+  OKDP_CA_VALIDITY: "8760h"
+
+  # Storage classes
+  OKDP_STORAGE_CLASS_DATA: "standard"
+  OKDP_STORAGE_CLASS_WORKSPACE: "standard"
+
+  # Database server
+  OKDP_DB_HOST: "postgresql-instance-rw.cnpg-system.svc.cluster.local"
+  OKDP_DB_PORT: "5432"
+
+  # Proxy (empty = no proxy)
+  OKDP_HTTP_PROXY: ""
+  OKDP_HTTPS_PROXY: ""
+  OKDP_NO_PROXY: ""

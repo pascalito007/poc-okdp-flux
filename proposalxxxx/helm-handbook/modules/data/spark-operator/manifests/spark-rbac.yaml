@@ -1,0 +1,41 @@
+# Spark RBAC for OKDP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark
+  namespace: default
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-role
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources:
+      ["pods", "pods/log", "services", "configmaps", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+  - apiGroups: ["sparkoperator.k8s.io"]
+    resources:
+      [
+        "sparkapplications",
+        "sparkapplications/status",
+        "scheduledsparkapplications",
+      ]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-role-binding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: spark
+    namespace: default
+roleRef:
+  kind: Role
+  name: spark-role
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,142 @@
+# Apache Airflow values for OKDP Sandbox
+# Chart: apache-airflow/airflow 1.17.0
+#
+# Requires:
+#   - PostgreSQL database "airflow" on postgresql-instance-rw.cnpg-system.svc.cluster.local:5432
+#   - cert-manager ClusterIssuer "default-issuer"
+#   - ingress-nginx IngressClass "nginx"
+
+executor: LocalExecutor
+
+defaultAirflowTag: "2.9.3"
+airflowVersion: "2.9.3"
+
+# --- Web Server ---
+webserver:
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    email: admin@example.com
+    firstName: admin
+    lastName: user
+    password: admin
+  resources:
+    requests:
+      memory: "384Mi"
+      cpu: "200m"
+    limits:
+      memory: "1024Mi"
+      cpu: "1000m"
+  startupProbe:
+    failureThreshold: 24
+    timeoutSeconds: 30
+
+# --- Scheduler ---
+scheduler:
+  resources:
+    requests:
+      memory: "384Mi"
+      cpu: "200m"
+    limits:
+      memory: "1024Mi"
+      cpu: "1000m"
+  startupProbe:
+    failureThreshold: 12
+    timeoutSeconds: 60
+
+# --- Triggerer ---
+triggerer:
+  enabled: true
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "512Mi"
+      cpu: "300m"
+
+# --- Ingress ---
+ingress:
+  web:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: default-issuer
+    hosts:
+      - name: airflow-default.okdp.sandbox
+        tls:
+          enabled: true
+          secretName: airflow-tls
+      - name: airflow.okdp.sandbox
+        tls:
+          enabled: true
+          secretName: airflow-tls
+
+# --- Database (external CNPG PostgreSQL) ---
+postgresql:
+  enabled: false
+
+data:
+  metadataConnection:
+    user: airflow
+    pass: airflow123
+    protocol: postgresql
+    host: postgresql-instance-rw.cnpg-system.svc.cluster.local
+    port: 5432
+    db: airflow
+    sslmode: disable
+
+# --- Disable unused components ---
+redis:
+  enabled: false
+workers:
+  replicas: 0
+dagProcessor:
+  enabled: false
+flower:
+  enabled: false
+pgbouncer:
+  enabled: false
+statsd:
+  enabled: false
+
+# --- DAGs (Git Sync) ---
+dags:
+  mountPath: /opt/airflow/dags
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: true
+    repo: "https://github.com/OKDP/okdp-sandbox.git"
+    branch: "main"
+    ref: "HEAD"
+    depth: 1
+    subPath: "examples/airflow/dags"
+    period: "60s"
+
+# --- Jobs ---
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+createUserJob:
+  useHelmHooks: false
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+config:
+  core:
+    load_examples: "False"
