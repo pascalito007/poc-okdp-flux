@@ -15,22 +15,22 @@
 
 | # | Section | Required? | Repo type | What to audit / check |
 |---|---------|:---------:|-----------|------------------------|
-| 0 | Visual header (logo or screenshot) | Recommended | All | Is there an image? Is it stored in `docs/assets/`? |
+| 0 | Visual header (screenshot or OKDP banner) | Conditional | UI repos only | Does the repo have a web UI? If yes: is there a screenshot stored in `docs/assets/`? If no UI: is the section omitted or replaced with an OKDP-branded banner? **Never use upstream project logos** (trademark restrictions). |
 | 1 | Badges (CI, Release, License, OKDP logo) | **Mandatory** | All | Are all 4 badges present and links working? |
 | 2 | Project name + one-line description + status | **Mandatory** | All | Clear to someone unfamiliar with the tool? Status (alpha/beta/stable) shown? |
 | 3 | What does this project provide? | **Mandatory** | All | Are delivered components listed (image/chart/SDK)? OKDP-specific additions highlighted? |
 | — | Alternatives (sub-section) | Optional | All | Are competing/upstream tools mentioned? |
-| 4 | Architecture diagram | **Mandatory** | All | Is a diagram present? Format: Mermaid, draw.io SVG, or Excalidraw SVG? |
-| 5 | Prerequisites | **Mandatory** | All | Are versions, tools, credentials all listed explicitly? |
+| 4 | Architecture diagram | **Mandatory** | All | Is a diagram present? Format: Mermaid, draw.io SVG, or Excalidraw SVG? Does it reflect the **OKDP deployment scenario** (not just upstream)? Is there a note explaining OKDP-specific choices and clarifying that other options exist? Is there a link to the upstream architecture docs? |
+| 5 | Prerequisites | **Mandatory** | All | Are versions, tools, credentials all listed explicitly? Is there a **"Tested with"** subsection showing exact validated versions (not just ranges)? |
 | 6 | Quick start | Conditional | Helm, Image+Chart, Sandbox | Does it work with one command? Is expected result shown? |
 | 7 | Installation (full, step-by-step) | **Mandatory** | All | Every step has a command + expected result? |
 | 8 | Configuration | Conditional | Helm, Image+Chart, SDK | Is there a parameter/env var table? Separated from auto-generated chart values? |
 | 9 | Usage examples | Conditional | SDK, Examples | Are examples realistic? Do they show expected output? |
 | 10 | Images / Components | Conditional | Image, Image+Chart | Tag format documented? `quay.io/okdp` link present? |
 | 11 | OKDP Integration | **Mandatory** | All | Sandbox linked? Service URL in sandbox mentioned? Ecosystem context explained? |
-| 12 | Troubleshooting | Recommended | All | Are the top 2-3 common errors documented with fix? |
+| 12 | Troubleshooting | **Mandatory** | Helm, Image+Chart, Sandbox | Are the **top 3** most common errors documented with symptom → cause → fix? |
 | 13 | Contributing / Development | Optional | All | Dev setup, build, and test — each with expected result? Points to CONTRIBUTING.md? |
-| 14 | Cleanup | Conditional | Sandbox, Helm | Is there a clean uninstall/teardown procedure? |
+| 14 | Uninstall / Teardown | **Mandatory** | Helm, Image+Chart, Sandbox | Is there a clean uninstall procedure (Helm release + namespace)? For sandbox: full cluster teardown? |
 | 15 | Contributing & License | **Mandatory** | All | CONTRIBUTING.md link present? License is Apache 2.0? |
 | 16 | "Built for OKDP Community" footer | **Mandatory** | All | Footer + OKDP logo SVG present? |
 
@@ -42,19 +42,44 @@
 
 ```markdown
 <!--
-  OKDP README Template — v1.0
+  OKDP README Template — v1.1
   Remove all annotation comments before publishing.
   Sections marked [CONDITIONAL] can be omitted if not applicable to the repo type.
+
+  Changelog v1.1 (June 2026):
+  - Section 0: conditional on UI, upstream logos forbidden, OKDP banner as alternative
+  - Section 4: OKDP deployment context note + upstream docs link now required
+  - Section 5: "Tested with" subsection added (exact validated versions)
+  - Section 12: upgraded to Mandatory for Helm/Image+Chart/Sandbox, top 3 errors required
+  - Section 14: renamed "Cleanup" → "Uninstall / Teardown", expanded scope, expected results added
 -->
 
 <!-- ═══════════════════════════════════════════════════════════
-     SECTION 0 — Visual Header
-     Product logo or main UI screenshot.
-     Store screenshots in docs/assets/ (not the root directory).
+     SECTION 0 — Visual Header [CONDITIONAL]
+     ONLY for repos with a web UI (Superset, JupyterHub, Airflow, …).
+     Use a screenshot of the running application, stored in docs/assets/.
+
+     ⚠️  Do NOT use upstream project logos (Apache Hive, Trino, Spark…).
+         These are trademarked assets. Using them implies endorsement and
+         may violate the upstream project's trademark policy.
+
+     If the repo has NO web UI (Helm chart, Docker image, backend service):
+       Option A — Omit this section entirely.
+       Option B — Use a simple OKDP-branded text banner (see below).
      ═══════════════════════════════════════════════════════════ -->
+
+<!-- Option A (repos WITH a UI): screenshot -->
 <p align="center">
-  <img src="docs/assets/product-screenshot.png" alt="[Project Name]" width="600"/>
+  <img src="docs/assets/screenshot.png" alt="[Project Name] — screenshot" width="700"/>
 </p>
+
+<!-- Option B (repos WITHOUT a UI): OKDP-branded text banner — delete Option A if using this -->
+<!--
+<p align="center">
+  <strong>OKDP — [Project Name]</strong><br/>
+  <em>[One-line description]</em>
+</p>
+-->
 
 <!-- ═══════════════════════════════════════════════════════════
      SECTION 1 — Badges
@@ -114,13 +139,25 @@ This repository delivers:
      SECTION 4 — Architecture
      Include a diagram. Preferred formats:
      - Mermaid (renders natively in GitHub — recommended)
-     - draw.io SVG (commit the .svg, store in docs/images/)
+     - draw.io SVG (commit the .svg, store in docs/assets/)
      - Excalidraw SVG
+
+     IMPORTANT: The diagram must show the OKDP deployment scenario,
+     not just the generic upstream architecture.
+     - Identify which dependencies are OKDP's specific choices
+       (e.g. PostgreSQL chosen because CloudNativePG is already in the stack).
+     - Clarify that other options exist to avoid misleading users.
+     - Always link to the upstream architecture or design documentation.
      ═══════════════════════════════════════════════════════════ -->
 ## Architecture
 
+> **OKDP deployment context:** This diagram reflects how [Project Name] is deployed within OKDP.
+> [Dependency X] (e.g. PostgreSQL) was chosen because [reason — e.g. it is already provisioned by the CloudNativePG operator in the OKDP sandbox].
+> Other options (e.g. MySQL) are supported by the upstream project and may also work — this is not an OKDP restriction.
+> See the [upstream architecture documentation](https://link-to-upstream-docs) for the full picture.
+
 <p align="center">
-  <img src="docs/images/architecture.drawio.svg" alt="Architecture diagram"/>
+  <img src="docs/assets/architecture.drawio.svg" alt="Architecture diagram"/>
 </p>
 
 <!--
@@ -139,12 +176,18 @@ graph TD
      SECTION 5 — Prerequisites
      Be explicit. Do NOT assume the reader knows what is implicit.
      List: tool versions, Kubernetes version, credentials, access rights.
+
+     Two sub-tables are required:
+     1. Supported versions (ranges) — what the project claims to support.
+     2. Tested with — exact versions validated by maintainers.
+        This avoids the situation where a user installs a version within
+        the supported range that has never actually been tested.
      ═══════════════════════════════════════════════════════════ -->
 ## Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Kubernetes | 1.28+ | |
+| Requirement | Supported versions | Notes |
+|-------------|-------------------|-------|
+| Kubernetes | 1.19+ | |
 | Helm | v3+ | |
 | [Tool X](https://...) | vX.Y+ | Required for ... |
 
@@ -152,6 +195,18 @@ graph TD
 - Access to `quay.io/okdp` registry (public, no authentication required)
 - A running PostgreSQL instance with an empty database *(if applicable)*
 - OAuth2/OIDC provider credentials *(if applicable)*
+
+### Tested with
+
+The following versions have been validated by the maintainers. Other versions within the supported range may work but are untested.
+
+| Tool | Version tested |
+|------|---------------|
+| Kubernetes (Kind) | `x.y.z` |
+| Kind | `x.y.z` |
+| Helm CLI | `x.y.z` |
+| kubectl | `x.y.z` |
+| Docker | `x.y.z` |
 
 ---
 
@@ -308,33 +363,42 @@ git clone https://github.com/OKDP/okdp-sandbox.git
 ---
 
 <!-- ═══════════════════════════════════════════════════════════
-     SECTION 12 — Troubleshooting [RECOMMENDED for all repos]
-     List the most common errors a new user will encounter.
-     Format: symptom → likely cause → fix
+     SECTION 12 — Troubleshooting [MANDATORY for Helm, Image+Chart, Sandbox]
+     Document the top 3 most common errors a new user will encounter.
+     Format: symptom → likely cause → fix command + expected result.
+     Do not leave this section empty or with placeholder text.
      ═══════════════════════════════════════════════════════════ -->
 ## Troubleshooting
 
-### `Error: INSTALLATION FAILED: ...`
+### Error 1 — `Error: INSTALLATION FAILED: ...`
 
+**Symptom:** `helm install` exits with an error.
 **Cause:** ...
 **Fix:**
 ```sh
 fix command here
 ```
 
-### Pod stuck in `Pending` state
+### Error 2 — Pod stuck in `Pending` state
 
-**Cause:** Insufficient cluster resources or missing PersistentVolumeClaim.
+**Symptom:** `kubectl get pods -n <namespace>` shows `Pending` after several minutes.
+**Cause:** Insufficient cluster resources, missing PersistentVolumeClaim, or missing Secret.
 **Fix:**
 ```sh
 kubectl describe pod <pod-name> -n <namespace>
 ```
-Look for `Events:` at the bottom of the output.
+Look for `Events:` at the bottom of the output to identify the root cause.
 
-### `ImagePullBackOff` on `quay.io/okdp/...`
+### Error 3 — `ImagePullBackOff` on `quay.io/okdp/...`
 
-**Cause:** The image tag does not exist (check spelling) or quay.io is unreachable.
-**Fix:** Verify the tag exists at [quay.io/okdp](https://quay.io/organization/okdp) and that your cluster has internet access.
+**Symptom:** Pod stays in `ImagePullBackOff` or `ErrImagePull`.
+**Cause:** The image tag does not exist (typo) or the cluster cannot reach `quay.io`.
+**Fix:** Verify the tag exists at [quay.io/okdp](https://quay.io/organization/okdp) and that the cluster has outbound internet access:
+```sh
+kubectl run test --image=quay.io/okdp/<image>:<tag> --restart=Never -n <namespace>
+kubectl describe pod test -n <namespace>
+kubectl delete pod test -n <namespace>
+```
 
 ---
 
@@ -387,20 +451,51 @@ All tests passed. (X tests, 0 failures)
 ---
 
 <!-- ═══════════════════════════════════════════════════════════
-     SECTION 14 — Cleanup [CONDITIONAL]
-     Applies to: Sandbox and install-heavy repos.
-     Provide a clean teardown procedure.
+     SECTION 14 — Uninstall / Teardown [MANDATORY for Helm, Image+Chart, Sandbox]
+     Provide a complete teardown procedure.
+     For Helm repos: include both release uninstall and namespace deletion.
+     For Sandbox repos: include full cluster teardown.
+     Each step must have an expected result.
      ═══════════════════════════════════════════════════════════ -->
-## Cleanup
+## Uninstall / Teardown
+
+### Remove the Helm release
 
 ```sh
-helm uninstall my-release -n <namespace>
+helm uninstall <release-name> -n <namespace>
 ```
 
-Or for sandbox environments:
+**Expected result:**
+```
+release "<release-name>" uninstalled
+```
+
+### Remove the namespace
+
+If the namespace was created solely for this installation:
+
+```sh
+kubectl delete namespace <namespace>
+```
+
+**Expected result:**
+```
+namespace "<namespace>" deleted
+```
+
+<!-- For sandbox environments, add full cluster teardown: -->
+<!--
+### Destroy the local cluster
+
 ```sh
 kind delete cluster --name okdp-sandbox
 ```
+
+**Expected result:**
+```
+Deleting cluster "okdp-sandbox" ...
+```
+-->
 
 ---
 
