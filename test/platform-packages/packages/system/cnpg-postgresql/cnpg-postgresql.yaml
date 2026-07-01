@@ -1,0 +1,54 @@
+#
+# Copyright 2026 The OKDP Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
+apiVersion: v1alpha1
+name: cnpg-postgresql
+tag: 18.3-p01
+protected: false
+description: |
+  Defines multiple logical PostgreSQL databases managed by the CloudNativePG operator within a single PostgreSQL 
+  instance (cluster) and includes ownership, access credentials, and lifecycle management through Kubernetes-native CRDs.
+usage:
+  text: |
+    Databases instances used in the sandbox
+modules:
+  - name: main
+    timeout: 10m
+    source:
+      oci:
+        repository: quay.io/okdp/charts/cnpg-postgresql
+        tag: 0.1.0
+    values: |
+      replicaCount: 1
+      fullnameOverride: {{ regexReplaceAll "-rw.*" .Context.defaultDatabaseServer.provider.endpoints.host "" }}
+      
+      image:
+        repository: ghcr.io/cloudnative-pg/postgresql
+        pullPolicy: IfNotPresent
+        tag: 18.3
+      
+      storage:
+        size: 2Gi
+        class: standard
+      
+      databases:
+      {{ toYaml .Context.defaultDatabaseServer.settings.databases | indent 4 }}
+roles:
+  - database-server
+dependencies:
+  - pg-operator
+  - external-secrets
+

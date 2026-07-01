@@ -1,0 +1,133 @@
+#
+# Copyright 2025 The OKDP Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Build and push KuboCD packages
+
+on:
+  workflow_call:
+    inputs:
+      publish_to_registry:
+        description: Wheter to push to the registry
+        required: false
+        type: string
+        default: "false"
+      registry:
+        description: The container registry
+        required: true
+        type: string
+      ci_registry:
+        description: "The registry used to push ci images"
+        required: false
+        type: string
+        default: "ghcr.io"
+      oci_package_prefix:
+        description: "OCI package prefix, e.g., 'quay.io/my-org/<PACKAGE-PREFIX>', i.e.: <PACKAGE-PREFIX> = platform-packages"
+        required: true
+        type: string
+      runs-on:
+        description: GitHub Actions Runner image
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  kubocd-package:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+
+      - name: Checkout Repo ⚡️
+        uses: actions/checkout@v4
+
+      - name: Login to the CI registry (${{ inputs.ci_registry }}) 🔐
+        if: inputs.publish_to_registry == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.ci_registry }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Login into public registry (${{ inputs.registry }}) 🔐
+        if: inputs.publish_to_registry == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_ROBOT_TOKEN }}
+
+      - name: Set CI Github container registry namespace (${{ inputs.ci_registry }}) 📦
+        if: inputs.publish_to_registry == 'false'
+        run:  |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_ENV
+          echo "REGISTRY=${{ inputs.ci_registry }}" >> $GITHUB_ENV
+          echo "OCI_REPO_PREFIX=${{ inputs.ci_registry }}/${GITHUB_REPOSITORY@L}/${{ inputs.oci_package_prefix }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Set public container registry namespace (${{ inputs.registry }}) 📦
+        if: inputs.publish_to_registry == 'true'
+        run:  |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_ENV
+          echo "REGISTRY=${{ inputs.registry }}" >> $GITHUB_ENV
+          echo "OCI_REPO_PREFIX=${{ inputs.registry }}/${GITHUB_REPOSITORY_OWNER@L}/${{ inputs.oci_package_prefix }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Install KuboCD CLI 🛠️
+        run: |
+          # curl -L -o kubocd https://github.com/kubocd/kubocd/releases/download/v0.2.2/kubocd_Linux_x86_64
+          # Temporary fix for: https://github.com/kubocd/kubocd/issues/2
+          curl -L -o kubocd https://github.com/kubocd/kubocd/releases/download/v0.2.2/kubocd_fix2_Linux_x86_64
+
+          # Make it executable
+          chmod +x kubocd
+
+          # Move to /usr/local/bin
+          sudo mv kubocd /usr/local/bin/
+
+          # Verify installation
+          kubocd version
+
+      # Build and push packages
+      - name: Find KuboCD packages 🔎
+        run: |
+          KUBOCD_PACKAGES=$(find packages -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l '^modules:' {} \; | tr '\n' ' ')
+          echo "KUBOCD_PACKAGES=$KUBOCD_PACKAGES" >> $GITHUB_ENV
+
+      - name: Build and push KuboCD packages into CI registry (${{ inputs.ci_registry }}) 📦
+        if: inputs.publish_to_registry == 'false'
+        run: |
+          for package in ${KUBOCD_PACKAGES}
+          do
+             echo "kubocd package ${package} --ociRepoPrefix $OCI_REPO_PREFIX"
+             kubocd package ${package} --ociRepoPrefix $OCI_REPO_PREFIX
+          done
+        env:
+          KCD_OCI_GHCR_IO_USER: ${{ github.actor }}
+          KCD_OCI_GHCR_IO_SECRET: ${{ github.token }}
+
+      - name: Build and push KuboCD packages into public registry (${{ inputs.registry }}) 📦
+        if: inputs.publish_to_registry == 'true'
+        run: |
+          for package in ${KUBOCD_PACKAGES}
+          do
+             echo "kubocd package ${package} --ociRepoPrefix $OCI_REPO_PREFIX"
+             kubocd package ${package} --ociRepoPrefix $OCI_REPO_PREFIX
+          done
+        env:
+          KCD_OCI_QUAY_IO_USER: ${{ secrets.REGISTRY_USERNAME }}
+          KCD_OCI_QUAY_IO_SECRET: ${{ secrets.REGISTRY_ROBOT_TOKEN }}
