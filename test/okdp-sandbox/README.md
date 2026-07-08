@@ -11,14 +11,7 @@
 
 OKDP Sandbox is a hands-on environment for deploying, testing, and exploring the [OKDP](https://okdp.io) ecosystem on a local Kubernetes cluster.
 
-It provides a ready-to-use data platform environment that includes:
-- Identity and access management (Keycloak)
-- Object storage (SeaweedFS)
-- Spark processing and monitoring (Spark Operator + Spark History Server)
-- Workflow orchestration (Apache Airflow)
-- Interactive data science workspaces (JupyterHub)
-- Data visualization (Apache Superset)
-- Platform management (OKDP Server & UI)
+It provides a ready-to-use data platform environment covering identity, object storage, Spark processing, workflow orchestration, interactive notebooks, SQL querying, and visualization, running end to end on a local cluster. See [What is included](#what-is-included-in-the-sandbox) for the full component list.
 
 ## What is included in the sandbox?
 
@@ -49,6 +42,8 @@ The **packages themselves** (the KuboCD packages bundled as OCI artifacts) live 
 | KuboCD packages (system and services), build and release automation | [`OKDP/platform-packages`](https://github.com/OKDP/platform-packages) |
 | Reusable utility Helm charts | [`OKDP/helm-charts-utilities`](https://github.com/OKDP/helm-charts-utilities) |
 | Notebooks, DAGs, and runnable examples | [`OKDP/okdp-examples`](https://github.com/OKDP/okdp-examples) |
+| OKDP web UI | [`OKDP/okdp-ui`](https://github.com/OKDP/okdp-ui) |
+| OKDP backend server (API) | [`OKDP/okdp-server`](https://github.com/OKDP/okdp-server) |
 | Single-cluster sandbox deployment (this repository) | `OKDP/okdp-sandbox` |
 
 ## Prerequisites
@@ -395,16 +390,6 @@ Remove-Item "$env:TEMP\okdp-sandbox-config.yaml" -Force
 ```
 
 </details>
-
-## Related repositories
-
-| Repository | Purpose |
-|---|---|
-| [`OKDP/platform-packages`](https://github.com/OKDP/platform-packages) | KuboCD packages (system and services), published as OCI artifacts |
-| [`OKDP/helm-charts-utilities`](https://github.com/OKDP/helm-charts-utilities) | Reusable utility Helm charts consumed by packages and examples |
-| [`OKDP/okdp-examples`](https://github.com/OKDP/okdp-examples) | Notebooks, DAGs, and data-platform examples |
-| [`OKDP/okdp-ui`](https://github.com/OKDP/okdp-ui) | OKDP web UI |
-| [`OKDP/okdp-server`](https://github.com/OKDP/okdp-server) | OKDP backend server |
 
 ## License
 
