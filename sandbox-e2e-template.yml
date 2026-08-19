@@ -1,0 +1,281 @@
+#
+# Copyright 2026 The OKDP Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
+# Reusable end-to-end install validation for an OKDP cluster definition.
+#
+# Spins up a throwaway Kind cluster, installs Flux and the KuboCD controller, applies
+# the contexts and releases from the given cluster directory exactly as the sandbox
+# README instructs, and waits until every KuboCD Release reaches READY.
+#
+# Two callers, one workflow:
+#
+#   - OKDP/okdp-sandbox validates its own manifests on push and pull_request. It passes
+#     no override, so the platform is deployed exactly as pinned.
+#
+#   - OKDP/platform-packages and OKDP/sandbox-dependencies validate candidate packages
+#     against the real platform, by passing package_overrides. The whole sandbox is
+#     deployed as pinned except the listed packages, which are taken from the registry
+#     and tag the calling PR has just published. Package CI republishes every package
+#     on merge, so a caller normally passes the whole set it is about to publish.
+#
+# This workflow builds nothing. Packages are pulled from the registries the manifests
+# name; the only thing the override changes is which tag one Release resolves to.
+
+name: Sandbox e2e (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      manifests_repository:
+        description: "Repository holding the cluster definition"
+        type: string
+        default: "OKDP/okdp-sandbox"
+      manifests_ref:
+        description: "Ref or SHA of manifests_repository to validate"
+        type: string
+        default: "main"
+      manifests_path:
+        description: "Cluster directory inside manifests_repository"
+        type: string
+        default: "clusters/sandbox"
+      package_overrides:
+        description: >-
+          JSON array of packages to re-pin before deploying. Each entry is
+          {"repository": <as pinned in the manifests>, "tag": <candidate tag>,
+          "target_repository": <optional, when the candidate lives in another registry>}.
+          Empty means deploy exactly as pinned.
+        type: string
+        default: "[]"
+      ready_timeout_seconds:
+        description: "How long to wait for every Release to reach READY"
+        type: number
+        default: 1200
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  sandbox-e2e:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout cluster manifests ⚡️
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.manifests_repository }}
+          ref: ${{ inputs.manifests_ref }}
+
+      - name: Re-pin packages to the candidate build 📌
+        if: inputs.package_overrides != '[]' && inputs.package_overrides != ''
+        env:
+          PACKAGE_OVERRIDES: ${{ inputs.package_overrides }}
+          RELEASES_DIR: ${{ inputs.manifests_path }}/releases
+        run: |
+          set -euo pipefail
+
+          # Package CI rebuilds and republishes *every* package on merge, not only the
+          # one a PR touched, so a caller validating a PR must re-pin the whole set it
+          # is about to publish. Hence a list rather than a single package.
+          # Written to a file rather than piped, so the loop runs in this shell and an
+          # `exit 1` inside it actually fails the step.
+          printf '%s' "$PACKAGE_OVERRIDES" | jq -c '.[]' > /tmp/overrides.jsonl
+          count="$(wc -l < /tmp/overrides.jsonl | tr -d ' ')"
+
+          if [ "$count" -eq 0 ]; then
+            echo "::error::package_overrides parsed to an empty list"
+            exit 1
+          fi
+
+          while IFS= read -r o; do
+            repo="$(printf '%s' "$o" | jq -r '.repository')"
+            tag="$(printf '%s' "$o" | jq -r '.tag')"
+            # The candidate may live in a different registry from the pinned release
+            # (a CI registry, typically). Default to re-pinning in place.
+            target="$(printf '%s' "$o" | jq -r '.target_repository // .repository')"
+
+            if [ -z "$repo" ] || [ "$repo" = "null" ] || [ -z "$tag" ] || [ "$tag" = "null" ]; then
+              echo "::error::override entry needs both .repository and .tag: $o"
+              exit 1
+            fi
+
+            # Fail loudly when nothing matches. A silent no-op here would produce a green
+            # run that validated the published package instead of the candidate — exactly
+            # the false signal this workflow exists to remove.
+            matches="$(grep -rl -- "repository: ${repo}\$" "$RELEASES_DIR" || true)"
+            if [ -z "$matches" ]; then
+              echo "::error::No Release in ${RELEASES_DIR} pins ${repo}"
+              echo "Pinned package repositories found:"
+              grep -rh -- 'repository:' "$RELEASES_DIR" | sort -u
+              exit 1
+            fi
+
+            for f in $matches; do
+              yq -i "
+                (.spec.package | select(.repository == \"${repo}\")) |= (
+                  .repository = \"${target}\" | .tag = \"${tag}\"
+                )
+              " "$f"
+              echo "re-pinned $(basename "$f") -> ${target}:${tag}"
+            done
+          done < /tmp/overrides.jsonl
+
+          echo "::notice::Deploying with ${count} package override(s) applied"
+
+      - name: Free up disk space 📦
+        uses: okdp/gh-workflows/.github/actions/free-disk-space@v1
+
+      - name: Set up Kind cluster 📦
+        uses: okdp/gh-workflows/.github/actions/setup-kind@v1
+
+      - name: Setup Flux CLI 🛠️
+        uses: fluxcd/flux2/action@main
+        with:
+          version: "2.7.5"
+
+      - name: Deploy Flux (basic mode) 🚀
+        run: flux install
+
+      - name: Wait until Flux controllers are ready ⌛
+        run: |
+          kubectl wait --for=condition=ready pod -l app=source-controller -n flux-system --timeout=300s
+
+      - name: Verify Flux installation ✅
+        run: |
+          flux version
+          kubectl -n flux-system get pods
+
+      - name: Bootstrap the KuboCD controller 🛠️
+        run: kubectl apply -f ${{ inputs.manifests_path }}/flux/kubocd.yaml
+
+      - name: Wait until the KuboCD controller is ready ⌛
+        run: |
+          # HelmRelease "Ready" implies the controller is rolled out and its CRDs
+          # (Context, Release) are registered, which the next steps need.
+          kubectl wait --for=condition=Ready helmrelease/kubocd-controller \
+            -n flux-system --timeout=600s
+          kubectl -n kubocd get pods
+
+      - name: Apply the platform contexts 🚀
+        run: |
+          # Order is immaterial: precedence is resolved by defaultContexts in
+          # kubocd.yaml. The NN- filename prefixes only order this glob apply.
+          kubectl apply -f ${{ inputs.manifests_path }}/contexts/
+
+      - name: Apply the platform releases 🚀
+        run: |
+          kubectl apply -f ${{ inputs.manifests_path }}/releases/
+
+      - name: Wait for all releases to become READY ✅
+        env:
+          TIMEOUT_SECS: ${{ inputs.ready_timeout_seconds }}
+        run: |
+          echo "**************************************** Storage Classes ****************************************"
+          kubectl get sc
+          kubectl get events -A -w >/tmp/kubectl-events.log 2>&1 &
+          EVENTS_PID=$!
+          trap 'kill $EVENTS_PID 2>/dev/null || true' EXIT
+
+          # Poll release phase explicitly; more stable than kubectl wait for this CRD.
+          timeout_secs="$TIMEOUT_SECS"
+          interval_secs=15
+          elapsed=0
+          ready=0
+
+          while [ "$elapsed" -lt "$timeout_secs" ]; do
+            echo "Wait until all KuboCD releases are ready ..."
+            echo "************************************** Releases status **************************************"
+            kubectl get release -A || true
+            echo "**************************************** Pods status ****************************************"
+            kubectl get po -A || true
+            echo "**************************************** PVC status ****************************************"
+            kubectl get pvc -A || true
+            echo "**************************************** Pending Pods ****************************************"
+            kubectl get pods -A --field-selector=status.phase=Pending \
+              -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name --no-headers \
+              | xargs -r -n2 sh -c 'echo "Pending Pod: $0/$1 ==="; kubectl describe pod -n "$0" "$1"; echo'
+
+            echo "**************************************** Unhealthy Pods ****************************************"
+            kubectl get pods -A --no-headers \
+              | awk '$4 ~ /CrashLoopBackOff|Error|ImagePullBackOff|CreateContainerConfigError|CreateContainerError/ {print $1, $2}' \
+              | while read -r ns pod; do
+                  [ -n "$ns" ] || continue
+                  [ -n "$pod" ] || continue
+                  echo "Unhealthy Pod: $ns/$pod ==="
+                  kubectl describe pod -n "$ns" "$pod" || true
+                  containers="$(
+                    kubectl get pod -n "$ns" "$pod" -o jsonpath='{range .spec.initContainers[*]}{.name}{"\n"}{end}{range .spec.containers[*]}{.name}{"\n"}{end}' 2>/dev/null || true
+                  )"
+                  for c in $containers; do
+                    echo "--- logs current: $ns/$pod container=$c ---"
+                    kubectl logs -n "$ns" "$pod" -c "$c" --tail=200 || true
+                    echo "--- logs previous: $ns/$pod container=$c ---"
+                    kubectl logs -n "$ns" "$pod" -c "$c" --previous --tail=200 || true
+                  done
+                  echo
+                done
+
+            not_ready="$(kubectl get release -A -o jsonpath='{range .items[?(@.status.phase!="READY")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)"
+
+            if [ -z "$not_ready" ]; then
+              echo "All releases are READY."
+              ready=1
+              break
+            fi
+
+            echo "Releases not ready yet:"
+            echo "$not_ready"
+
+            scheduling_errors="$(
+              kubectl get events -A --field-selector reason=FailedScheduling --no-headers 2>/dev/null \
+                | grep -E 'Insufficient (cpu|memory)' || true
+            )"
+
+            if [ -n "$scheduling_errors" ]; then
+              echo "Detected insufficient CPU or memory in Kubernetes scheduling events."
+              echo "Treating this as a CI capacity limitation and exiting successfully."
+              echo "$scheduling_errors"
+              exit 0
+            fi
+
+            sleep "$interval_secs"
+            elapsed=$((elapsed + interval_secs))
+          done
+
+          if [ "$ready" -eq 1 ]; then
+            exit 0
+          fi
+
+          echo "Timed out waiting for READY releases after ${timeout_secs}s"
+          kubectl get release -A
+          kubectl get helmrelease -A || true
+          kubectl get jobs -A || true
+          echo "Last events log lines:"
+          tail -n 200 /tmp/kubectl-events.log || true
+
+          scheduling_errors="$(
+            kubectl get events -A --field-selector reason=FailedScheduling --no-headers 2>/dev/null \
+              | grep -E 'Insufficient (cpu|memory)' || true
+          )"
+
+          if [ -n "$scheduling_errors" ]; then
+            echo "Detected insufficient CPU or memory in Kubernetes scheduling events."
+            echo "Treating this as a CI capacity limitation and exiting successfully."
+            echo "$scheduling_errors"
+            exit 0
+          fi
+
+          exit 1

@@ -1,0 +1,49 @@
+#
+# Copyright 2026 The OKDP Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+
+# End-to-end install validation for the sandbox deployment.
+#
+# The implementation lives in OKDP/gh-workflows so that the package repositories can
+# run the same validation against candidate packages. This file owns only the
+# triggers and the concurrency policy; everything it does is in the template.
+
+name: Deploy validation (sandbox e2e)
+
+on:
+  pull_request:
+    paths:
+      - "clusters/**"
+      - ".github/workflows/deploy-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "clusters/**"
+  workflow_dispatch:
+
+concurrency:
+  # A full install takes 9-15 minutes when it passes. Only the newest run per ref
+  # is ever interesting.
+  group: deploy-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-validation:
+    uses: okdp/gh-workflows/.github/workflows/sandbox-e2e-template.yml@v1
+    with:
+      # Validate this repository's own manifests, at the commit under review rather
+      # than at main.
+      manifests_repository: ${{ github.repository }}
+      manifests_ref: ${{ github.event.pull_request.head.sha || github.sha }}
