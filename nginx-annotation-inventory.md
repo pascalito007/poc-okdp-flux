@@ -8,14 +8,14 @@ will break just as loudly.
 
 | | |
 |---|---|
-| Compiled | 19 August 2026 |
+| Compiled | 24 August 2026 |
 | Scope | 27 repositories, default branches, `github.com/OKDP` |
 | Repos scanned | 27 |
 | Distinct nginx annotation keys | **15** |
-| Live annotation instances | **31** |
-| Ingress objects hardcoding `nginx` | **16** |
-| Repos carrying nginx annotations | **8** |
-| Keys with no Gateway API equivalent | **5** |
+| Live annotation instances | **29** |
+| Ingress objects hardcoding `nginx` | **3** |
+| Repos carrying nginx annotations | **7** |
+| Keys with no Gateway API equivalent | **9** |
 
 ---
 
@@ -35,28 +35,34 @@ will break just as loudly.
 ## 1. The short version
 
 The organisation uses **15 distinct `nginx.ingress.kubernetes.io/*` annotation keys** across
-**31 live occurrences** in 8 repositories. That number is smaller than it looks: two thirds of the
+**29 live occurrences**, in just 4 repositories. That number is smaller than it looks: two thirds of the
 instances are three annotations — HTTPS redirect, proxy timeouts, and body-size limits — and all three
 have clean answers under both Traefik and Gateway API.
 
 The real exposure is concentrated in two places. **[HTTP Basic auth on the SeaweedFS filer](#reg-basic-auth)**
 and **[CORS on the kubauth OIDC endpoint](#reg-cors)** are the only annotations that make the ingress
 controller do security work on behalf of the application. Neither has a Cilium Ingress equivalent, and
-neither is covered by stable Gateway API. Everything else is a translation exercise.
+neither survives the move to Gateway API on Cilium: basic auth is not in the specification at all, and
+Cilium 1.19 lists the Gateway API `HTTPRouteCORS` filter among its *unsupported* features. Everything else
+is a translation exercise.
 
 Two things matter more than the annotation list itself, and neither is an annotation:
 
-- The class name `nginx` is still **[hardcoded in 16 Ingress objects](#reg-class-bindings)** rather than read
-  from the platform context — two open PRs are fixing this right now, and both are incomplete.
+- The class name is now read from the platform context nearly everywhere — the variabilisation landed on
+  21 August. Only **[3 Ingress objects still hardcode `nginx`](#reg-class-bindings)**: two in the successor
+  package set, and one fresh regression in the sandbox's new Vault package. Keeping it at zero is now a
+  review problem, not a migration problem.
 - The platform's **CoreDNS patch, install-ordering graph and NodePort pinning** all name the nginx
   controller explicitly. These break on day one of any swap, regardless of how many annotations were translated.
 
 > **The one-line answer**
 >
-> Moving to Traefik is a mechanical translation of 31 annotations into roughly 5 Traefik middlewares plus
-> a global HTTPS redirect; every key has somewhere to go. Moving to Cilium is a different exercise: 12 of
-> the 15 keys are simply ignored by Cilium Ingress, and even on Gateway API 5 of them have no equivalent
-> and must be re-implemented as Envoy config or moved into the applications.
+> Moving to Traefik is a mechanical translation of 29 annotations into roughly 5 Traefik middlewares plus
+> a global HTTPS redirect; every key but `proxy-buffer-size` has somewhere to go, and that one is a re-test
+> rather than a rebuild. Moving to Cilium is a different exercise: 10 of the 15 keys are simply ignored by
+> Cilium Ingress, and even on Gateway API 9 of them have no equivalent on the pinned 1.19 — body size,
+> buffer size, basic auth ×3 and CORS ×4 — and must be re-implemented as Envoy config or moved into the
+> applications.
 
 ---
 
@@ -82,12 +88,12 @@ Forces a 308 redirect from HTTP to HTTPS **even when the Ingress has no usable T
 | Target | Outcome |
 |---|---|
 | **Traefik** | ⚠️ No annotation. Either a `redirectScheme` Middleware per router, or — better — one global `web → websecure` entryPoint redirect that deletes all 8 at once. |
-| **Cilium Ingress** | ⚠️ Cilium exposes `ingress.cilium.io/force-https`. Different key, same intent; confirm it exists in your pinned Cilium version. |
+| **Cilium Ingress** | ⚠️ Cilium exposes [`ingress.cilium.io/force-https`](https://github.com/cilium/cilium/blob/v1.19.6/operator/pkg/ingress/annotations/annotations.go#L27). Different key, same intent — confirmed present in the pinned 1.19. |
 | **Gateway API** (Cilium / Envoy) | ✅ A `RequestRedirect` filter on an HTTP-listener HTTPRoute. Already proven in the sandbox Gateway API POC. |
 
 ### `proxy-body-size`
 
-`"0"` and `"130m"` · 4 live — [see all occurrences ↓](#reg-proxy-body-size)
+`"0"`, `"64m"` and `"130m"` · 5 live — [see all occurrences ↓](#reg-proxy-body-size)
 
 Caps the client request body. `0` disables the cap entirely (nginx defaults to 1 MB, which breaks file and DAG uploads); `130m` is a deliberate ceiling on object-storage uploads.
 
@@ -99,26 +105,26 @@ Caps the client request body. `0` disables the cap entirely (nginx defaults to 1
 
 ### `proxy-read-timeout`
 
-300 / 600 / 3600 s · 4 live — [see all occurrences ↓](#reg-proxy-read-timeout)
+300 / 600 / 3600 s · 3 live — [see all occurrences ↓](#reg-proxy-read-timeout)
 
-How long nginx waits for a response from the backend. Raised well above the 60 s default so long-running Trino and Superset queries, and the OKDP UI's streaming endpoints, are not cut off mid-flight.
+How long nginx waits for a response from the backend. Raised well above the 60 s default so long-running Trino and Superset queries, and SeaweedFS transfers, are not cut off mid-flight.
 
 | Target | Outcome |
 |---|---|
 | **Traefik** | ⚠️ Not a router annotation. Set on the entryPoint (`respondingTimeouts`) and per-service via a `ServersTransport` CRD attached with `service.serverstransport`. |
-| **Cilium Ingress** | ❌ No annotation. Envoy's route timeout applies instead — its default is far shorter than 3600 s, so long queries fail rather than degrade. |
-| **Gateway API** (Cilium / Envoy) | ⚠️ `HTTPRoute.spec.rules[].timeouts.request` covers this. Verify your Cilium version honours the field, and set it explicitly — do not rely on defaults. |
+| **Cilium Ingress** | ✅ [`ingress.cilium.io/request-timeout`](https://github.com/cilium/cilium/blob/v1.19.6/operator/pkg/ingress/annotations/annotations.go#L28) covers this — one timeout rather than nginx's read/send pair. Set it explicitly: unset, Envoy's own route default applies and is far shorter than 3600 s. |
+| **Gateway API** (Cilium / Envoy) | ✅ `HTTPRoute.spec.rules[].timeouts.request`. Cilium 1.19 passes the `HTTPRouteRequestTimeout` conformance feature ([report](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)). Set it explicitly — do not rely on defaults. |
 
 ### `proxy-send-timeout`
 
-300 / 3600 s · 3 live — [see all occurrences ↓](#reg-proxy-send-timeout)
+300 / 3600 s · 2 live — [see all occurrences ↓](#reg-proxy-send-timeout)
 
 Companion to the above, on the request-write side. Always set alongside `proxy-read-timeout` in this codebase.
 
 | Target | Outcome |
 |---|---|
 | **Traefik** | ⚠️ Same `ServersTransport` / entryPoint mechanism as the read timeout. |
-| **Cilium Ingress** | ❌ No annotation. |
+| **Cilium Ingress** | ⚠️ Folded into [`ingress.cilium.io/request-timeout`](https://github.com/cilium/cilium/blob/v1.19.6/operator/pkg/ingress/annotations/annotations.go#L28) alongside the read timeout — Cilium does not split the two. |
 | **Gateway API** (Cilium / Envoy) | ⚠️ Folded into the single HTTPRoute request timeout — Gateway API does not split read and write. |
 
 ### `proxy-connect-timeout`
@@ -131,7 +137,7 @@ How long to wait to *establish* the upstream connection. 300 s is far beyond any
 |---|---|
 | **Traefik** | ⚠️ `ServersTransport.forwardingTimeouts.dialTimeout`. |
 | **Cilium Ingress** | ❌ No annotation. |
-| **Gateway API** (Cilium / Envoy) | ⚠️ Not separately modelled; covered by `timeouts.backendRequest`. Safe to drop given the value is unrealistic anyway. |
+| **Gateway API** (Cilium / Envoy) | ⚠️ Not separately modelled; covered by `timeouts.backendRequest`, which Cilium 1.19 does support ([`HTTPRouteBackendTimeout`](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)). Safe to drop given the value is unrealistic anyway. |
 
 ### `proxy-buffer-size`
 
@@ -147,7 +153,7 @@ Enlarges the buffer nginx uses for the first part of the upstream response. In p
 
 ### `use-regex`
 
-`"true"` · 2 live — [see all occurrences ↓](#reg-use-regex)
+`"true"` · 1 live — [see all occurrences ↓](#reg-use-regex)
 
 Tells nginx to interpret the Ingress `path` as a regular expression. **Both uses sit on a path of `/`** — there is no regex to interpret, so the annotation does nothing today.
 
@@ -179,7 +185,7 @@ basic · 3 live, one Ingress — [see all occurrences ↓](#reg-basic-auth)
 |---|---|
 | **Traefik** | ⚠️ A `headers` Middleware with `accessControlAllowOriginList`, `…AllowMethods`, `…AllowCredentials`. Direct one-to-one mapping of the four values. |
 | **Cilium Ingress** | ❌ No CORS annotations. Console login breaks with an opaque browser-side CORS error — the hardest failure mode here to diagnose. |
-| **Gateway API** (Cilium / Envoy) | ⚠️ Gateway API has a CORS filter, but it is recent and support varies by implementation. Verify against your Cilium version; fall back to CiliumEnvoyConfig or serving CORS from kubauth itself. |
+| **Gateway API** (Cilium / Envoy) | ❌ Gateway API defines a CORS filter, but **Cilium 1.19 lists `HTTPRouteCORS` under `unsupportedFeatures`** in its own conformance report ([report](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)). The filter is accepted by the API server and then silently ignored — preflight is forwarded upstream. Use CiliumEnvoyConfig, or serve CORS from kubauth itself. |
 
 ### `backend-protocol`
 
@@ -200,49 +206,69 @@ Tells nginx to speak plain HTTP to the Keycloak pod rather than HTTPS. **This is
 Portable across Ingress controllers, so easy to overlook — yet two of them change behaviour the moment
 the platform moves from Ingress to Gateway API.
 
-### `cert-manager.io/cluster-issuer` — 22 occurrences
+### `cert-manager.io/cluster-issuer` — 21 live, 2 in samples
 
 Hands TLS certificate issuance for the Ingress host to cert-manager's ingress-shim, using the platform's
 self-signed ClusterIssuer.
 
 ✅ **Direct** under Traefik or Cilium Ingress — cert-manager is controller-agnostic.
 ⚠️ **Rework** under Gateway API: ingress-shim does not watch Gateways unless cert-manager is started with
-Gateway API support, and the annotation then belongs on the **Gateway**, not on each route. Twenty-two
+Gateway API support, and the annotation then belongs on the **Gateway**, not on each route. Twenty-one
 annotations collapse into one wildcard certificate on a shared Gateway.
 
-- **`platform-packages`** — [`airflow.yaml:208`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L208) · [`jupyterhub.yaml:241`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/jupyterhub/jupyterhub.yaml#L241) · [`polaris.yaml:251`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L251) · [`polaris.yaml:372`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L372) · [`spark-history-server.yaml:128`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L128) · [`spark-history-server.yaml:234`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L234) · [`superset.yaml:351`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L351) · [`trino.yaml:467`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/trino/trino.yaml#L467) · [`okdp-server.yaml:190`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-server/okdp-server.yaml#L190) · [`okdp-server.yaml:205`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-server/okdp-server.yaml#L205) · [`okdp-ui.yaml:91`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-ui/okdp-ui.yaml#L91)
-- **`sandbox-dependencies`** — [`keycloak.yaml:89`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/keycloak/keycloak.yaml#L89) · [`seaweedfs.yaml:243`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L243) · [`seaweedfs.yaml:284`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L284)
-- **`okdp-control-plane-packages`** — [`airflow.yaml:266`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/airflow/airflow.yaml#L266) · [`jupyterhub.yaml:335`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/jupyterhub/jupyterhub.yaml#L335) · [`seaweedfs.yaml:130`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/seaweedfs/seaweedfs.yaml#L130) · [`superset.yaml:235`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/superset/superset.yaml#L235) · [`trino.yaml:177`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/trino/trino.yaml#L177) · [`ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/polaris/charts/polaris/templates/ingress.yaml#L6) · [`ingress.yaml:7`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L7)
-- **`okdp-control-plane-dev-sandbox`** — [`vault.yaml:25`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/packages/system/vault/vault.yaml#L25)
+- **`platform-packages`** — [`airflow.yaml:276`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/airflow/airflow.yaml#L276) · [`jupyterhub.yaml:321`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/jupyterhub/jupyterhub.yaml#L321) · [`polaris.yaml:269`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/polaris/polaris.yaml#L269) · [`polaris.yaml:363`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/polaris/polaris.yaml#L363) · [`spark-history-server.yaml:115`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/spark-history-server/spark-history-server.yaml#L115) · [`spark-history-server.yaml:232`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/spark-history-server/spark-history-server.yaml#L232) · [`superset.yaml:398`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L398) · [`trino.yaml:444`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/trino/trino.yaml#L444)
+- **`sandbox-dependencies`** — [`seaweedfs.yaml:261`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L261) · [`seaweedfs.yaml:302`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L302) · [`keycloak.yaml:174`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/keycloak/keycloak.yaml#L174) · [`vault.yaml:67`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/vault/vault.yaml#L67)
+- **`okdp-control-plane-packages`** — [`airflow.yaml:266`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/airflow/airflow.yaml#L266) · [`jupyterhub.yaml:335`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/jupyterhub/jupyterhub.yaml#L335) · [`seaweedfs.yaml:130`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/seaweedfs/seaweedfs.yaml#L130) · [`superset.yaml:235`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/superset/superset.yaml#L235) · [`trino.yaml:177`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/trino/trino.yaml#L177) · [`polaris/…/ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/polaris/charts/polaris/templates/ingress.yaml#L6) · [`spark-web-proxy/…/ingress.yaml:7`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L7)
+- **`okdp-control-plane-dev-sandbox`** — [`vault.yaml:25`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/packages/system/vault/vault.yaml#L25)
+- **`okdp-control-plane-ui`** — [`chart/templates/ingress.yaml:8`](https://github.com/OKDP/okdp-control-plane-ui/blob/047e8ff09ec1/chart/templates/ingress.yaml#L8)
+- *Samples* — [`okdp-superset/sample-values.yaml:118`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L118) · [`polaris-console/values.yaml:84`](https://github.com/OKDP/polaris-console/blob/541027b592c5/helm/polaris-console/values.yaml#L84) (commented)
 
-### `kubernetes.io/ingress.class` — 2 occurrences
+### `kubernetes.io/ingress.class` — 2 live, 8 in charts and samples
 
-The pre-1.18 way of selecting a controller, superseded by the `ingressClassName` field. Still honoured by ingress-nginx.
+The pre-1.18 way of selecting a controller, superseded by the `ingressClassName` field. Honoured by
+ingress-nginx, ignored by everything else.
 
-❌ **Remove — a landmine.** Hardcoded to `nginx` on the Airflow and Superset Ingresses *alongside* a
-templated class field. Change the class variable and these two objects still carry a contradictory nginx
-marker. Both open class-variabilisation PRs leave it in place.
+⬜ **Drop it — no longer a landmine.** Both live uses were pinned to `nginx` alongside an already-templated
+class field until [`45137e9`](https://github.com/OKDP/platform-packages/commit/45137e928afca8f6d34fcbf46e5e5f93c4c57ad6)
+variabilised them on 21 August. They now render from the same context key as `ingressClassName`, so they can
+no longer contradict it — but they are dead weight on any non-nginx controller and should simply be deleted.
 
-- **`platform-packages`** — [`airflow.yaml:207`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L207) · [`superset.yaml:350`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L350)
+- **`platform-packages`** — [`airflow.yaml:275`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/airflow/airflow.yaml#L275) · [`superset.yaml:397`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L397) — both now `{{ .Context.ingress.className }}`
 
-### `acme.cert-manager.io/http01-edit-in-place` — 1 occurrence
+Three standalone charts re-create the annotation on their own, setting it from `.Values.ingress.className`
+whenever the caller has not supplied one — so it reappears on every Ingress they render:
+
+- [`okdp-server/templates/ingress.yaml:6`](https://github.com/OKDP/okdp-server/blob/174c5e83de2c/helm/okdp-server/templates/ingress.yaml#L6) · [`okdp-ui/templates/ingress.yaml:6`](https://github.com/OKDP/okdp-ui/blob/0ad1e75f84d6/helm/okdp-ui/templates/ingress.yaml#L6) · [`spark-web-proxy/templates/ingress.yaml:22`](https://github.com/OKDP/spark-web-proxy/blob/547e02ac3f19/helm/spark-web-proxy/templates/ingress.yaml#L22)
+
+One literal `nginx` survives in a sample, plus four commented-out examples contributors copy from:
+[`okdp-superset/sample-values.yaml:117`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L117) ·
+[`okdp-server/values.yaml:282`](https://github.com/OKDP/okdp-server/blob/174c5e83de2c/helm/okdp-server/values.yaml#L282) ·
+[`okdp-ui/values.yaml:97`](https://github.com/OKDP/okdp-ui/blob/0ad1e75f84d6/helm/okdp-ui/values.yaml#L97) ·
+[`polaris-console/values.yaml:83`](https://github.com/OKDP/polaris-console/blob/541027b592c5/helm/polaris-console/values.yaml#L83) ·
+[`spark-web-proxy/values.yaml:129`](https://github.com/OKDP/spark-web-proxy/blob/547e02ac3f19/helm/spark-web-proxy/values.yaml#L129)
+
+### `acme.cert-manager.io/http01-edit-in-place` — 2 occurrences
 
 Makes ACME HTTP-01 solve the challenge by editing the existing Ingress instead of creating a temporary one.
 
 ⬜ **Drop it** — inherited from the upstream Superset chart sample. The sandbox uses a self-signed issuer,
 so no ACME challenge is ever solved.
 
-- **`platform-packages`** — [`superset.yaml:352`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L352)
+- **`platform-packages`** — [`superset.yaml:399`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L399)
+- **`okdp-superset`** — [`sample-values.yaml:119`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L119) — the sample it was copied from
 
-### `metallb.universe.tf/loadBalancerIPs` and `…/allow-shared-ip` — 4 occurrences
+### `metallb.universe.tf/loadBalancerIPs` and `…/allow-shared-ip` — 6 occurrences
 
-Service-level annotations on the nginx controller Service, applied only in the package's `metallb` exposure mode.
+Service-level annotations, applied only in the package's `metallb` exposure mode. Four sit on the nginx
+controller Service; two more sit on the Hive metastore chart's own Service, which the original scan missed.
 
-⚠️ **Rework** — they belong to the controller's own Service, so they move wholesale to whatever Service
-exposes the replacement. Cilium replaces MetalLB entirely with `CiliumLoadBalancerIPPool` plus L2 announcements.
+⚠️ **Rework** — the controller's four move wholesale to whatever Service exposes the replacement. Cilium
+replaces MetalLB entirely with `CiliumLoadBalancerIPPool` plus L2 announcements, so the Hive metastore pair
+needs the same treatment even though it has nothing to do with ingress.
 
-- **`sandbox-dependencies`** — [`ingress-nginx.yaml:67`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/ingress-nginx/ingress-nginx.yaml#L67) · [`ingress-nginx.yaml:68`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/ingress-nginx/ingress-nginx.yaml#L68)
-- **`okdp-control-plane-dev-sandbox`** — [`ingress-nginx.yaml:51`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/packages/system/ingress-nginx/ingress-nginx.yaml#L51) · [`ingress-nginx.yaml:52`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/packages/system/ingress-nginx/ingress-nginx.yaml#L52)
+- **`sandbox-dependencies`** — [`ingress-nginx.yaml:67`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/ingress-nginx/ingress-nginx.yaml#L67) · [`ingress-nginx.yaml:68`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/ingress-nginx/ingress-nginx.yaml#L68)
+- **`okdp-control-plane-dev-sandbox`** — [`ingress-nginx.yaml:51`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/packages/system/ingress-nginx/ingress-nginx.yaml#L51) · [`ingress-nginx.yaml:52`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/packages/system/ingress-nginx/ingress-nginx.yaml#L52)
+- **`hive-metastore`** — [`service.yaml:33`](https://github.com/OKDP/hive-metastore/blob/b3f1eb6e31ee/helm/hive-metastore/templates/service.yaml#L33) · [`service.yaml:36`](https://github.com/OKDP/hive-metastore/blob/b3f1eb6e31ee/helm/hive-metastore/templates/service.yaml#L36) — not an ingress concern, but the same MetalLB dependency
 
 ---
 
@@ -257,7 +283,7 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 ### Live — annotations on Ingress objects the platform actually deploys
 
-*31 occurrences. Keys shown without the `nginx.ingress.kubernetes.io/` prefix.*
+*29 occurrences, in 4 repositories. Keys shown without the `nginx.ingress.kubernetes.io/` prefix.*
 
 <a id="reg-force-ssl-redirect"></a>
 
@@ -267,58 +293,57 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `force-ssl-redirect` | `"true"` | `platform-packages` | [`jupyterhub.yaml:240`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/jupyterhub/jupyterhub.yaml#L240) | JupyterHub proxy |
-| `force-ssl-redirect` | `"true"` | `platform-packages` | [`polaris.yaml:250`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L250) | Polaris API |
-| `force-ssl-redirect` | `"true"` | `platform-packages` | [`polaris.yaml:371`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L371) | Polaris Console |
-| `force-ssl-redirect` | `"true"` | `platform-packages` | [`spark-history-server.yaml:127`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L127) | Spark History Server |
-| `force-ssl-redirect` | `"true"` | `platform-packages` | [`spark-history-server.yaml:233`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L233) | Spark web proxy |
-| `force-ssl-redirect` | `"true"` | `sandbox-dependencies` | [`keycloak.yaml:88`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/keycloak/keycloak.yaml#L88) | Keycloak |
-| `force-ssl-redirect` | `"true"` | `okdp-control-plane-packages` | [`jupyterhub.yaml:334`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/jupyterhub/jupyterhub.yaml#L334) | JupyterHub proxy |
-| `force-ssl-redirect` | `"true"` | `okdp-control-plane-packages` | [`ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L6) | Spark web proxy — chart template |
+| `force-ssl-redirect` | `"true"` | `platform-packages` | [`jupyterhub.yaml:317`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/jupyterhub/jupyterhub.yaml#L317) | JupyterHub proxy |
+| `force-ssl-redirect` | `"true"` | `platform-packages` | [`polaris.yaml:268`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/polaris/polaris.yaml#L268) | Polaris API |
+| `force-ssl-redirect` | `"true"` | `platform-packages` | [`polaris.yaml:362`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/polaris/polaris.yaml#L362) | Polaris Console |
+| `force-ssl-redirect` | `"true"` | `platform-packages` | [`spark-history-server.yaml:114`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/spark-history-server/spark-history-server.yaml#L114) | Spark History Server |
+| `force-ssl-redirect` | `"true"` | `platform-packages` | [`spark-history-server.yaml:231`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/spark-history-server/spark-history-server.yaml#L231) | Spark web proxy |
+| `force-ssl-redirect` | `"true"` | `sandbox-dependencies` | [`keycloak.yaml:173`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/keycloak/keycloak.yaml#L173) | Keycloak |
+| `force-ssl-redirect` | `"true"` | `okdp-control-plane-packages` | [`jupyterhub.yaml:334`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/jupyterhub/jupyterhub.yaml#L334) | JupyterHub proxy |
+| `force-ssl-redirect` | `"true"` | `okdp-control-plane-packages` | [`ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L6) | Spark web proxy — chart template |
 
 [↑ back to the matrix](#2-translation-matrix)
 
 <a id="reg-proxy-body-size"></a>
 
-#### `proxy-body-size` — 4 occurrences
+#### `proxy-body-size` — 5 occurrences
 
-> Traefik: `buffering` middleware · Cilium and Gateway API: no equivalent — the 130m cap is lost
+> Traefik: `buffering` middleware · Cilium and Gateway API: no equivalent — the `64m` and `130m` caps are lost
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `proxy-body-size` | `"0"` | `platform-packages` | [`airflow.yaml:209`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L209) | Airflow API server |
-| `proxy-body-size` | `"130m"` | `sandbox-dependencies` | [`seaweedfs.yaml:242`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L242) | SeaweedFS filer console |
-| `proxy-body-size` | `"130m"` | `sandbox-dependencies` | [`seaweedfs.yaml:283`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L283) | SeaweedFS S3 endpoint |
-| `proxy-body-size` | `"0"` | `okdp-control-plane-packages` | [`seaweedfs.yaml:131`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/seaweedfs/seaweedfs.yaml#L131) | SeaweedFS |
+| `proxy-body-size` | `"0"` | `platform-packages` | [`airflow.yaml:277`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/airflow/airflow.yaml#L277) | Airflow API server |
+| `proxy-body-size` | `"64m"` | `platform-packages` | [`jupyterhub.yaml:320`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/jupyterhub/jupyterhub.yaml#L320) | JupyterHub proxy — **added since 19 Aug** |
+| `proxy-body-size` | `"130m"` | `sandbox-dependencies` | [`seaweedfs.yaml:260`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L260) | SeaweedFS filer console |
+| `proxy-body-size` | `"130m"` | `sandbox-dependencies` | [`seaweedfs.yaml:301`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L301) | SeaweedFS S3 endpoint |
+| `proxy-body-size` | `"0"` | `okdp-control-plane-packages` | [`seaweedfs.yaml:131`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/seaweedfs/seaweedfs.yaml#L131) | SeaweedFS |
 
 [↑ back to the matrix](#2-translation-matrix)
 
 <a id="reg-proxy-read-timeout"></a>
 
-#### `proxy-read-timeout` — 4 occurrences
+#### `proxy-read-timeout` — 3 occurrences
 
-> Traefik: `ServersTransport` · Gateway API: `timeouts.request` — must be set explicitly or Envoy's short default applies
+> Traefik: `ServersTransport` · Cilium Ingress: `ingress.cilium.io/request-timeout` · Gateway API: `timeouts.request` — set explicitly or Envoy's short default applies
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `proxy-read-timeout` | `"300"` | `platform-packages` | [`superset.yaml:356`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L356) | Superset UI |
-| `proxy-read-timeout` | `"3600"` | `platform-packages` | [`trino.yaml:468`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/trino/trino.yaml#L468) | Trino UI |
-| `proxy-read-timeout` | `"3600"` | `platform-packages` | [`okdp-ui.yaml:92`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-ui/okdp-ui.yaml#L92) | OKDP UI |
-| `proxy-read-timeout` | `"600"` | `okdp-control-plane-packages` | [`seaweedfs.yaml:132`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/seaweedfs/seaweedfs.yaml#L132) | SeaweedFS |
+| `proxy-read-timeout` | `"300"` | `platform-packages` | [`superset.yaml:403`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L403) | Superset UI |
+| `proxy-read-timeout` | `"3600"` | `platform-packages` | [`trino.yaml:445`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/trino/trino.yaml#L445) | Trino UI |
+| `proxy-read-timeout` | `"600"` | `okdp-control-plane-packages` | [`seaweedfs.yaml:132`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/seaweedfs/seaweedfs.yaml#L132) | SeaweedFS |
 
 [↑ back to the matrix](#2-translation-matrix)
 
 <a id="reg-proxy-send-timeout"></a>
 
-#### `proxy-send-timeout` — 3 occurrences
+#### `proxy-send-timeout` — 2 occurrences
 
-> Folds into the same Gateway API request timeout — Gateway API does not split read and write
+> Folds into the single Cilium / Gateway API request timeout — neither splits read and write
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `proxy-send-timeout` | `"300"` | `platform-packages` | [`superset.yaml:357`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L357) | Superset UI |
-| `proxy-send-timeout` | `"3600"` | `platform-packages` | [`trino.yaml:469`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/trino/trino.yaml#L469) | Trino UI |
-| `proxy-send-timeout` | `"3600"` | `platform-packages` | [`okdp-ui.yaml:93`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-ui/okdp-ui.yaml#L93) | OKDP UI |
+| `proxy-send-timeout` | `"300"` | `platform-packages` | [`superset.yaml:404`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L404) | Superset UI |
+| `proxy-send-timeout` | `"3600"` | `platform-packages` | [`trino.yaml:446`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/trino/trino.yaml#L446) | Trino UI |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -330,7 +355,7 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `proxy-connect-timeout` | `"300"` | `platform-packages` | [`superset.yaml:355`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L355) | Superset UI |
+| `proxy-connect-timeout` | `"300"` | `platform-packages` | [`superset.yaml:402`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L402) | Superset UI |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -342,20 +367,19 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `proxy-buffer-size` | `"128k"` | `platform-packages` | [`superset.yaml:358`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L358) | Superset UI |
+| `proxy-buffer-size` | `"128k"` | `platform-packages` | [`superset.yaml:405`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/superset/superset.yaml#L405) | Superset UI |
 
 [↑ back to the matrix](#2-translation-matrix)
 
 <a id="reg-use-regex"></a>
 
-#### `use-regex` — 2 occurrences
+#### `use-regex` — 1 occurrence
 
-> Both uses sit on path `/` — does nothing today, delete before migrating
+> Sits on path `/` — does nothing today, delete before migrating. The OKDP UI's copy went away with the `okdp-ui` package.
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `use-regex` | `"true"` | `platform-packages` | [`trino.yaml:470`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/trino/trino.yaml#L470) | Trino UI |
-| `use-regex` | `"true"` | `platform-packages` | [`okdp-ui.yaml:94`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-ui/okdp-ui.yaml#L94) | OKDP UI |
+| `use-regex` | `"true"` | `platform-packages` | [`trino.yaml:447`](https://github.com/OKDP/platform-packages/blob/f2a6c0871d6a/packages/services/trino/trino.yaml#L447) | Trino UI |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -363,13 +387,13 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 #### `auth-type` · `auth-secret` · `auth-realm` — 3 occurrences
 
-> **The highest-impact group** — no Cilium Ingress equivalent, none in stable Gateway API
+> **The highest-impact group** — no Cilium Ingress equivalent, none in Gateway API
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `auth-type` | `basic` | `sandbox-dependencies` | [`seaweedfs.yaml:244`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L244) | SeaweedFS filer console |
-| `auth-secret` | `creds-seaweedfs-filer-basic` | `sandbox-dependencies` | [`seaweedfs.yaml:245`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L245) | SeaweedFS filer console |
-| `auth-realm` | `"Authentication Required"` | `sandbox-dependencies` | [`seaweedfs.yaml:246`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L246) | SeaweedFS filer console |
+| `auth-type` | `basic` | `sandbox-dependencies` | [`seaweedfs.yaml:262`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L262) | SeaweedFS filer console |
+| `auth-secret` | `creds-seaweedfs-filer-basic` | `sandbox-dependencies` | [`seaweedfs.yaml:263`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L263) | SeaweedFS filer console |
+| `auth-realm` | `"Authentication Required"` | `sandbox-dependencies` | [`seaweedfs.yaml:264`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/services/seaweedfs/seaweedfs.yaml#L264) | SeaweedFS filer console |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -377,14 +401,14 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 #### `enable-cors` · `cors-allow-origin` · `cors-allow-methods` · `cors-allow-credentials` — 4 occurrences
 
-> Traefik: `headers` middleware, one-to-one · Cilium Ingress: ignored, console login breaks in the browser
+> Traefik: `headers` middleware, one-to-one · Cilium Ingress **and** Gateway API on Cilium 1.19: ignored, console login breaks in the browser
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `enable-cors` | `"true"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:30`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/manifests/platform/kubauth.yaml#L30) | kubauth OIDC |
-| `cors-allow-origin` | `"https://console.okdp.dev-sandbox"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:31`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/manifests/platform/kubauth.yaml#L31) | kubauth OIDC |
-| `cors-allow-methods` | `"GET, PUT, POST, DELETE, PATCH, OPTIONS"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:32`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/manifests/platform/kubauth.yaml#L32) | kubauth OIDC |
-| `cors-allow-credentials` | `"true"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:33`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/manifests/platform/kubauth.yaml#L33) | kubauth OIDC |
+| `enable-cors` | `"true"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:30`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/manifests/platform/kubauth.yaml#L30) | kubauth OIDC |
+| `cors-allow-origin` | `"https://console.okdp.dev-sandbox"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:31`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/manifests/platform/kubauth.yaml#L31) | kubauth OIDC |
+| `cors-allow-methods` | `"GET, PUT, POST, DELETE, PATCH, OPTIONS"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:32`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/manifests/platform/kubauth.yaml#L32) | kubauth OIDC |
+| `cors-allow-credentials` | `"true"` | `okdp-control-plane-dev-sandbox` | [`kubauth.yaml:33`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/manifests/platform/kubauth.yaml#L33) | kubauth OIDC |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -396,7 +420,7 @@ successor set. Both carry nginx annotations, so a migration has to cover both or
 
 | Key | Value | Repository | File and line | Ingress object |
 |---|---|---|---|---|
-| `backend-protocol` | `"HTTP"` | `sandbox-dependencies` | [`keycloak.yaml:87`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/keycloak/keycloak.yaml#L87) | Keycloak |
+| `backend-protocol` | `"HTTP"` | `sandbox-dependencies` | [`keycloak.yaml:172`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/keycloak/keycloak.yaml#L172) | Keycloak |
 
 [↑ back to the matrix](#2-translation-matrix)
 
@@ -407,56 +431,69 @@ annotations come back after the migration is signed off. *15 occurrences.*
 
 | Key | Value | Repository | File and line | Context |
 |---|---|---|---|---|
-| `proxy-connect-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:122`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/sample-values.yaml#L122) | sample values |
-| `proxy-read-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:123`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/sample-values.yaml#L123) | sample values |
-| `proxy-send-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:124`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/sample-values.yaml#L124) | sample values |
-| `proxy-buffer-size` | `"128k"` | `okdp-superset` | [`sample-values.yaml:125`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/sample-values.yaml#L125) | sample values |
-| `proxy-connect-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:510`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/values.yaml#L510) | chart default |
-| `proxy-read-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:511`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/values.yaml#L511) | chart default |
-| `proxy-send-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:512`](https://github.com/OKDP/okdp-superset/blob/5230d594eb4753f732b636a159cafc5fd2c781c3/helm/superset/values.yaml#L512) | chart default |
-| `auth-realm` | `Authentication Required` | `spark-history-server` | [`TEST.md:479`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ecc573398e4007673d5db027dd36b3/docs/TEST.md#L479) | doc walkthrough |
-| `auth-secret` | `creds-seaweedfs-filer-basic` | `spark-history-server` | [`TEST.md:480`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ecc573398e4007673d5db027dd36b3/docs/TEST.md#L480) | doc walkthrough |
-| `auth-type` | `basic` | `spark-history-server` | [`TEST.md:481`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ecc573398e4007673d5db027dd36b3/docs/TEST.md#L481) | doc walkthrough |
-| `proxy-body-size` | `130m` | `spark-history-server` | [`TEST.md:482`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ecc573398e4007673d5db027dd36b3/docs/TEST.md#L482) | doc walkthrough |
-| `proxy-body-size` | `130m` | `spark-history-server` | [`TEST.md:510`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ecc573398e4007673d5db027dd36b3/docs/TEST.md#L510) | doc walkthrough |
-| `auth-secret` | `<secret-name>` — doc | `helm-charts-utilities` | [`README.md:26`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa640772d4853bc6850592f8105820d/charts/seaweedfs-auth-config/README.md#L26) | chart doc |
-| `auth-secret` | `<secret-name>` — comment | `helm-charts-utilities` | [`values.yaml:176`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa640772d4853bc6850592f8105820d/charts/seaweedfs-auth-config/values.yaml#L176) | chart doc |
-| `auth-secret` | `referenced in a comment` | `helm-charts-utilities` | [`filer-auth-secret.yaml:20`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa640772d4853bc6850592f8105820d/charts/seaweedfs-auth-config/templates/filer-auth-secret.yaml#L20) | chart doc |
+| `proxy-connect-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:122`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L122) | sample values |
+| `proxy-read-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:123`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L123) | sample values |
+| `proxy-send-timeout` | `"300"` | `okdp-superset` | [`sample-values.yaml:124`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L124) | sample values |
+| `proxy-buffer-size` | `"128k"` | `okdp-superset` | [`sample-values.yaml:125`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L125) | sample values |
+| `proxy-connect-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:510`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/values.yaml#L510) | chart default |
+| `proxy-read-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:511`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/values.yaml#L511) | chart default |
+| `proxy-send-timeout` | `"300" — commented out` | `okdp-superset` | [`values.yaml:512`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/values.yaml#L512) | chart default |
+| `auth-realm` | `Authentication Required` | `spark-history-server` | [`TEST.md:479`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L479) | doc walkthrough |
+| `auth-secret` | `creds-seaweedfs-filer-basic` | `spark-history-server` | [`TEST.md:480`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L480) | doc walkthrough |
+| `auth-type` | `basic` | `spark-history-server` | [`TEST.md:481`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L481) | doc walkthrough |
+| `proxy-body-size` | `130m` | `spark-history-server` | [`TEST.md:482`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L482) | doc walkthrough |
+| `proxy-body-size` | `130m` | `spark-history-server` | [`TEST.md:510`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L510) | doc walkthrough |
+| `auth-secret` | `<secret-name>` — doc | `helm-charts-utilities` | [`README.md:26`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa6/charts/seaweedfs-auth-config/README.md#L26) | chart doc |
+| `auth-secret` | `<secret-name>` — comment | `helm-charts-utilities` | [`values.yaml:176`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa6/charts/seaweedfs-auth-config/values.yaml#L176) | chart doc |
+| `auth-secret` | `referenced in a comment` | `helm-charts-utilities` | [`filer-auth-secret.yaml:20`](https://github.com/OKDP/helm-charts-utilities/blob/c82dddb9afa6/charts/seaweedfs-auth-config/templates/filer-auth-secret.yaml#L20) | chart doc |
 
 <a id="reg-class-bindings"></a>
 
 ### Class bindings — every place `nginx` is named as the controller
 
-The first sixteen rows are Ingress objects on deployable packages. The last two are the platform context
-defaults — the single value each environment flips once every object above reads from it. *22 occurrences.*
+Twenty sites now read the class from the platform context. **Fifteen still name `nginx` literally, and only
+three of those are Ingress objects the platform actually deploys** — the rest are the two context defaults
+themselves, two chart defaults, and eight samples and doc snippets. The variabilisation PRs merged on
+21 August; the `In-flight` column they used to need is gone.
 
-| Field | Value | Repository | File and line | Ingress object | In-flight |
+**The single switch** — the one value each environment flips.
+
+| Field | Value | Repository | File and line | What it is | Status |
 |---|---|---|---|---|---|
-| `ingressClassName` | `nginx` | `platform-packages` | [`airflow.yaml:205`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L205) | Airflow API server | PR #52 |
-| `kubernetes.io/ingress.class` | `nginx` | `platform-packages` | [`airflow.yaml:207`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L207) | Airflow API server | **PR #52 leaves it** |
-| `ingressClassName` | `nginx` | `platform-packages` | [`jupyterhub.yaml:242`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/jupyterhub/jupyterhub.yaml#L242) | JupyterHub proxy | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`polaris.yaml:248`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L248) | Polaris API | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`polaris.yaml:369`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/polaris/polaris.yaml#L369) | Polaris Console | PR #52 |
-| `ingressClassName` | `"nginx"` | `platform-packages` | [`spark-history-server.yaml:125`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L125) | Spark History Server | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`spark-history-server.yaml:231`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/spark-history-server/spark-history-server.yaml#L231) | Spark web proxy | PR #52 |
-| `ingressClassName` | `"nginx"` | `platform-packages` | [`superset.yaml:348`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L348) | Superset UI | PR #52 |
-| `kubernetes.io/ingress.class` | `nginx` | `platform-packages` | [`superset.yaml:350`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L350) | Superset UI | **PR #52 leaves it** |
-| `className` | `nginx` | `platform-packages` | [`trino.yaml:465`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/trino/trino.yaml#L465) | Trino UI | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`okdp-server.yaml:188`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-server/okdp-server.yaml#L188) | okdp-server Swagger | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`okdp-server.yaml:203`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-server/okdp-server.yaml#L203) | okdp-server API | PR #52 |
-| `className` | `"nginx"` | `platform-packages` | [`okdp-ui.yaml:89`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/system/okdp-ui/okdp-ui.yaml#L89) | OKDP UI | PR #52 |
-| `className` | `nginx` | `sandbox-dependencies` | [`seaweedfs.yaml:240`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L240) | SeaweedFS filer console | PR #20 |
-| `className` | `nginx` | `sandbox-dependencies` | [`seaweedfs.yaml:281`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L281) | SeaweedFS S3 endpoint | **missed by PR #20** |
-| `ingressClassName` | `"nginx"` | `sandbox-dependencies` | [`keycloak.yaml:85`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/keycloak/keycloak.yaml#L85) | Keycloak | PR #20 |
-| `ingressClassName` | `nginx` | `okdp-control-plane-packages` | [`jupyterhub.yaml:336`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/jupyterhub/jupyterhub.yaml#L336) | JupyterHub proxy | no PR open |
-| `ingressClassName` | `nginx` | `okdp-control-plane-packages` | [`ingress.yaml:9`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L9) | Spark web proxy | **hardcoded in template** |
-| `className` | `"nginx"` | `okdp-control-plane-packages` | [`values.yaml:15`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/polaris/charts/polaris/values.yaml#L15) | Polaris chart default | package overrides it |
-| `className` | `nginx` | `okdp-control-plane-ui` | [`values.yaml:21`](https://github.com/OKDP/okdp-control-plane-ui/blob/7b7f82bd3984011694645af6da3f0b2727d6f3f3/chart/values.yaml#L21) | Console chart default | no package override |
-| `platform.ingress.className` | `nginx` | `okdp-sandbox` | [`10-platform-context.yaml:33`](https://github.com/OKDP/okdp-sandbox/blob/00570d45511cb49057ee6991dc69969840bbec89/clusters/sandbox/contexts/10-platform-context.yaml#L33) | platform-wide default | _the single switch_ |
-| `ingress.className` | `nginx` | `okdp-control-plane-dev-sandbox` | [`default-context.yaml:11`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/clusters/dev/default-context.yaml#L11) | platform-wide default | _the single switch_ |
+| `platform.ingress.className` | `nginx` | `okdp-sandbox` | [`10-platform-context.yaml:33`](https://github.com/OKDP/okdp-sandbox/blob/6650e737d351/clusters/sandbox/contexts/10-platform-context.yaml#L33) | platform-wide default | ⚠️ still nested under `platform:`; [PR #90](https://github.com/OKDP/okdp-sandbox/pull/90) flattens it to `ingress.className` |
+| `ingress.className` | `nginx` | `okdp-control-plane-dev-sandbox` | [`default-context.yaml:11`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/clusters/dev/default-context.yaml#L11) | platform-wide default | ✅ already flat |
 
-PRs are [OKDP/platform-packages#52](https://github.com/OKDP/platform-packages/pull/52) and
-[OKDP/sandbox-dependencies#20](https://github.com/OKDP/sandbox-dependencies/pull/20), both open at time of scan.
+**Still hardcoded on a deployable Ingress** — the only three that block a class change.
+
+| Field | Value | Repository | File and line | What it is | Status |
+|---|---|---|---|---|---|
+| `ingressClassName` | `nginx` | `sandbox-dependencies` | [`vault.yaml:65`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/vault/vault.yaml#L65) | Vault | ❌ **new since the 19 Aug scan** — package added after the PRs merged |
+| `ingressClassName` | `nginx` | `okdp-control-plane-packages` | [`jupyterhub.yaml:336`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/jupyterhub/jupyterhub.yaml#L336) | JupyterHub proxy | ❌ never converted, no PR open |
+| `ingressClassName` | `nginx` | `okdp-control-plane-packages` | [`ingress.yaml:9`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L9) | Spark web proxy | ❌ in the template; `values.yaml` exposes no `className` to override |
+
+**Chart defaults** — literal, but a package may override them.
+
+| Field | Value | Repository | File and line | What it is | Status |
+|---|---|---|---|---|---|
+| `className` | `"nginx"` | `okdp-control-plane-packages` | [`polaris/…/values.yaml:15`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/polaris/charts/polaris/values.yaml#L15) | Polaris chart default | ⬜ package overrides it from context |
+| `className` | `nginx` | `okdp-control-plane-ui` | [`chart/values.yaml:42`](https://github.com/OKDP/okdp-control-plane-ui/blob/047e8ff09ec1/chart/values.yaml#L42) | Console chart default | ⚠️ no package override — the console is installed by hand |
+
+**Samples and documentation** — nothing deploys, but this is what contributors copy from.
+
+| Field | Value | Repository | File and line | What it is | Status |
+|---|---|---|---|---|---|
+| `className` | `"nginx"` | `okdp-server` | [`values.keycloak.yaml:208`](https://github.com/OKDP/okdp-server/blob/174c5e83de2c/helm/okdp-server/values.keycloak.yaml#L208) | sample values | ⬜ |
+| `className` | `"nginx"` | `okdp-server` | [`values.keycloak.yaml:217`](https://github.com/OKDP/okdp-server/blob/174c5e83de2c/helm/okdp-server/values.keycloak.yaml#L217) | sample values | ⬜ |
+| `className` | `"nginx"` | `okdp-ui` | [`values.keycloak.yaml:28`](https://github.com/OKDP/okdp-ui/blob/0ad1e75f84d6/helm/okdp-ui/values.keycloak.yaml#L28) | sample values | ⬜ |
+| `ingressClassName` | `"nginx"` | `okdp-superset` | [`sample-values.yaml:115`](https://github.com/OKDP/okdp-superset/blob/5230d594eb47/helm/superset/sample-values.yaml#L115) | sample values | ⬜ |
+| `className` | `"nginx"` | `spark-web-proxy` | [`values.sample.yaml:21`](https://github.com/OKDP/spark-web-proxy/blob/547e02ac3f19/helm/spark-web-proxy/values.sample.yaml#L21) | sample values | ⬜ |
+| `className` | `nginx` | `spark-history-server` | [`TEST.md:474`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L474) | doc walkthrough | ⬜ |
+| `className` | `nginx` | `spark-history-server` | [`TEST.md:505`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L505) | doc walkthrough | ⬜ |
+| `ingressClassName` | `nginx` | `spark-history-server` | [`TEST.md:588`](https://github.com/OKDP/spark-history-server/blob/8ae9eb68b7ec/docs/TEST.md#L588) | doc walkthrough | ⬜ |
+
+The two variabilisation PRs — [platform-packages#52](https://github.com/OKDP/platform-packages/pull/52) and
+[sandbox-dependencies#20](https://github.com/OKDP/sandbox-dependencies/pull/20) — both merged on 21 August.
+`#20` was force-pushed before merge to pick up the SeaweedFS S3 Ingress it had originally missed.
 
 ---
 
@@ -470,7 +507,7 @@ annotation grep.
 ### CoreDNS wildcard target
 
 The sandbox patches CoreDNS so `*.okdp.sandbox` resolves to
-[`ingress-nginx-main-controller.ingress-nginx.svc.cluster.local`](https://github.com/OKDP/okdp-sandbox/blob/00570d45511cb49057ee6991dc69969840bbec89/clusters/sandbox/releases/coredns-patch.yaml#L30). In-cluster OIDC calls to Keycloak depend on it.
+[`ingress-nginx-main-controller.ingress-nginx.svc.cluster.local`](https://github.com/OKDP/okdp-sandbox/blob/6650e737d351/clusters/sandbox/releases/coredns-patch.yaml#L30). In-cluster OIDC calls to Keycloak depend on it.
 
 **Required:** retarget to the new controller's Service. Miss this and every in-cluster OIDC redirect
 fails while the browser-facing path looks perfectly healthy.
@@ -479,7 +516,7 @@ fails while the browser-facing path looks perfectly healthy.
 
 The controller package declares `roles: [ingress]`; every package with an Ingress declares
 `dependencies: [ingress]`. The dependency exists to wait for nginx's `validate.nginx.ingress.kubernetes.io`
-admission webhook — a comment in the [`Vault release`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/manifests/infrastructure/vault.yaml#L8) says so explicitly.
+admission webhook — a comment in the [`Vault release`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/manifests/infrastructure/vault.yaml#L8) says so explicitly.
 
 **Required:** the replacement package must claim the same `ingress` role, or the whole dependency graph
 stalls. The webhook race disappears with Traefik and Cilium, which ship no equivalent validating webhook —
@@ -487,17 +524,31 @@ a simplification, once the role is transferred.
 
 ### NodePort pinning
 
-The controller Service is pinned to NodePort [`30080 / 30443`](https://github.com/OKDP/okdp-sandbox/blob/00570d45511cb49057ee6991dc69969840bbec89/clusters/sandbox/releases/ingress-nginx.yaml#L31), matched by the kind host-port mapping.
+The controller Service is pinned to NodePort [`30080 / 30443`](https://github.com/OKDP/okdp-sandbox/blob/6650e737d351/clusters/sandbox/releases/ingress-nginx.yaml#L31), matched by the kind host-port mapping.
 
 **Required:** the replacement must claim the same two node ports, or the kind cluster definition changes
 too. Cilium exposes this through `insecure-node-port` / `secure-node-port` settings.
 
 ### Controller-level nginx settings
 
-[`allowSnippetAnnotations`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/ingress-nginx/ingress-nginx.yaml#L59) and [`extraArgs.enable-ssl-passthrough`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/ingress-nginx/ingress-nginx.yaml#L61) in the ingress-nginx package values.
+[`allowSnippetAnnotations`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/ingress-nginx/ingress-nginx.yaml#L59) and [`extraArgs.enable-ssl-passthrough`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/ingress-nginx/ingress-nginx.yaml#L61) in the ingress-nginx package values.
 
 Both are nginx-only chart settings and simply vanish. Note that **no Ingress in the organisation actually
 uses `ssl-passthrough`** — the flag is enabled attack surface with no consumer.
+
+### The platform context is being reshaped underneath all of this
+
+The packages no longer read `.Context.platform.ingress.className`; since the connections refactor they read a
+**flat** `.Context.ingress.className` — 14 uses across `platform-packages` and `sandbox-dependencies`, plus 41
+uses of `.Context.ingress.suffix`. But [`okdp-sandbox`](https://github.com/OKDP/okdp-sandbox/blob/6650e737d351/clusters/sandbox/contexts/10-platform-context.yaml#L33)
+still nests both keys under `platform:`. The cluster-side counterpart is
+[okdp-sandbox#90](https://github.com/OKDP/okdp-sandbox/pull/90) (`refactor!: run the sandbox on typed
+connections`), still open, whose diff moves the block to a flat `ingress:` key.
+
+**Required:** land `#90` before treating the context as the single switch — until it merges, packages `main`
+and sandbox `main` disagree on the shape of the key every Ingress now depends on. Note also that
+[okdp-sandbox#86](https://github.com/OKDP/okdp-sandbox/pull/86) is integrating Cilium as the sandbox CNI, so
+the CNI change below is already in flight.
 
 ### Cilium is a CNI change, not a controller swap
 
@@ -519,109 +570,172 @@ Decide the destination before migrating this host: Traefik `BasicAuth` middlewar
 
 → [3 basic-auth occurrences ↓](#reg-basic-auth)
 
-### `CRITICAL` — Both open class-variabilisation PRs are incomplete
+### `HIGH` — The successor package set is now the only place the class debt survives
 
-Two PRs are replacing the hardcoded `nginx` class with the platform context variable — exactly the right move, and a prerequisite for any migration. Both stop short.
+`okdp-control-plane-packages` is largely clean: Airflow, Polaris, SeaweedFS, Superset and Trino all read the
+class from context. Two packages do not — and since the 21 August merges they hold **two of the only three
+Ingress objects in the organisation that still hardcode `nginx`** (the third is Vault, below).
 
-**[platform-packages#52](https://github.com/OKDP/platform-packages/pull/52)** converts the class field on Airflow and Superset but leaves the legacy `kubernetes.io/ingress.class: nginx` annotation on both ([`airflow.yaml:207`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/airflow/airflow.yaml#L207), [`superset.yaml:350`](https://github.com/OKDP/platform-packages/blob/800a8fac33916abc63ae313b8e864b03f757bc41/packages/services/superset/superset.yaml#L350)). The result is an Ingress whose class field says one thing and whose annotation says nginx.
+**JupyterHub** pins both the class ([`jupyterhub.yaml:336`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/jupyterhub/jupyterhub.yaml#L336)) and `force-ssl-redirect`
+([`jupyterhub.yaml:334`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/jupyterhub/jupyterhub.yaml#L334)). A one-line change — the same one `platform-packages` already made.
 
-**[sandbox-dependencies#20](https://github.com/OKDP/sandbox-dependencies/pull/20)** converts the SeaweedFS *filer* Ingress ([`seaweedfs.yaml:240`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L240)) but not the SeaweedFS *S3* Ingress in the same file ([`seaweedfs.yaml:281`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/services/seaweedfs/seaweedfs.yaml#L281)), which keeps `className: nginx`. Changing the platform class would split SeaweedFS across two controllers.
+**The `spark-web-proxy` sub-chart** is the harder one. The class ([`ingress.yaml:9`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L9)) and the
+annotation ([`ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L6)) are written straight into the Ingress template, and its `values.yaml`
+exposes only `host`, `clusterIssuer` and `tlsSecretName` — there is no override to escape through. Fixing it
+means editing the chart, not the package that consumes it.
 
-Neither is a blocker to merge — but reviewing them now costs one comment each and saves a debugging session later.
+SeaweedFS additionally carries two proxy annotations ([`seaweedfs.yaml:131`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/seaweedfs/seaweedfs.yaml#L131),
+[`seaweedfs.yaml:132`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1/seaweedfs/seaweedfs.yaml#L132)) needing the same translation as their `platform-packages` equivalents.
 
-→ [all 22 class bindings ↓](#reg-class-bindings)
+Fixing this while the successor set is still small was always the cheap option. It is now also nearly the only
+class work left — everything else closed on 21 August — so these two objects, plus Vault, are what stand
+between the organisation and a controller change that is genuinely one value in one file.
 
-### `HIGH` — The successor package set is repeating the same debt
-
-`okdp-control-plane-packages` is largely clean — most packages already read the class from context and carry only cert-manager annotations. But JupyterHub still hardcodes both the class ([`jupyterhub.yaml:336`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/jupyterhub/jupyterhub.yaml#L336)) and `force-ssl-redirect` ([`jupyterhub.yaml:334`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/jupyterhub/jupyterhub.yaml#L334)), SeaweedFS carries two proxy annotations ([`seaweedfs.yaml:131`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/seaweedfs/seaweedfs.yaml#L131)), and the `spark-web-proxy` sub-chart hardcodes the class *and* the annotation directly in the Ingress template ([`ingress.yaml:6`](https://github.com/OKDP/okdp-control-plane-packages/blob/a6e3c299d7a1538a3b91eb252c7a93fda5da0622/spark-history-server/charts/spark-web-proxy/templates/ingress.yaml#L6)), with no values override to escape through.
-
-Fixing these while the successor set is still small is dramatically cheaper than fixing them after it becomes the platform.
-
-→ [live register ↓](#4-occurrence-register)
+→ [the 3 live hardcodes ↓](#reg-class-bindings) · [live register ↓](#4-occurrence-register)
 
 ### `HIGH` — Timeouts are the most likely silent regression
 
-Four Ingresses raise the backend timeout to between 300 and 3600 seconds because Trino queries, Superset queries and SeaweedFS transfers genuinely run that long. Under Cilium and Gateway API the annotations are ignored and Envoy's own route timeout applies — which is much shorter than any of these values.
+Three Ingresses raise the backend read timeout to between 300 and 3600 seconds — two of them also raise the send timeout — because Trino queries, Superset queries and SeaweedFS transfers genuinely run that long. The nginx annotations are ignored on both Cilium paths, and unless a replacement timeout is set explicitly Envoy's own route default applies, which is far shorter than any of these values.
 
-Nothing fails at deploy time. The platform comes up green and then long queries start dying under load. Set `HTTPRoute.spec.rules[].timeouts.request` explicitly on these four routes and test with a query that genuinely exceeds a minute.
+Nothing fails at deploy time. The platform comes up green and then long queries start dying under load. The good news is that the fix is available on the pinned version: Cilium 1.19 supports `HTTPRoute.spec.rules[].timeouts.request` ([conformance report](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)), and Cilium Ingress offers `ingress.cilium.io/request-timeout`. Set one of them explicitly on these three routes and test with a query that genuinely exceeds a minute.
 
-→ [4 timeout occurrences ↓](#reg-proxy-read-timeout)
+→ [3 read-timeout occurrences ↓](#reg-proxy-read-timeout) · [2 send-timeout ↓](#reg-proxy-send-timeout)
 
 ### `HIGH` — CORS on kubauth breaks the console with a browser-side error
 
-Four annotations let the console call the kubauth OIDC endpoint cross-origin with credentials. Under Cilium Ingress they are ignored outright; under Gateway API the CORS filter is recent enough that support needs verifying against the pinned Cilium version.
+Four annotations let the console call the kubauth OIDC endpoint cross-origin with credentials. Under Cilium Ingress they are ignored outright — and Gateway API is **not** the escape hatch here: Cilium 1.19 lists `HTTPRouteCORS` under `unsupportedFeatures` in its own conformance report ([report](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)). An `HTTPRoute` CORS filter is accepted by the API server and then does nothing; the browser preflight is forwarded upstream to kubauth.
 
 The failure surfaces only in the browser console as a CORS rejection, with nothing wrong in any pod log — worth writing into the migration runbook ahead of time.
 
 → [4 CORS occurrences ↓](#reg-cors)
 
+### `HIGH` — A hardcoded class has already come back in the current sandbox
+
+[`sandbox-dependencies/packages/system/vault/vault.yaml:65`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/vault/vault.yaml#L65) sets
+`ingressClassName: nginx` directly. The package did not exist at the previous scan — it landed *after* the
+variabilisation PRs merged, writing back the exact pattern they had just removed across the rest of the repo.
+
+Everything else in `platform-packages` and `sandbox-dependencies` now reads the class from context, so this
+one object would be left pointing at nginx while the rest of the sandbox moved — the same split-across-two-
+controllers failure the SeaweedFS S3 Ingress nearly caused. The fix is one line: `{{ .Context.ingress.className }}`,
+as in [`keycloak.yaml:170`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/keycloak/keycloak.yaml#L170).
+
+The recurrence is the real finding. A grep for `ingressClassName:\s*nginx` in CI would have caught this at PR
+time and would keep catching it; review demonstrably did not.
+
+→ [the 3 live hardcodes ↓](#reg-class-bindings)
+
 ### `CLEANUP` — Four annotations can be deleted today, before any migration
 
-`use-regex` on Trino and the OKDP UI sits on a path of `/` and matches nothing. `backend-protocol: HTTP` on Keycloak restates nginx's default. `proxy-connect-timeout: 300` on Superset is an unrealistic value copied from an upstream sample. `acme.cert-manager.io/http01-edit-in-place` applies to an ACME flow the sandbox never runs.
+`use-regex` on Trino sits on a path of `/` and matches nothing. `backend-protocol: HTTP` on Keycloak restates nginx's default. `proxy-connect-timeout: 300` on Superset is an unrealistic value copied from an upstream sample. `acme.cert-manager.io/http01-edit-in-place` applies to an ACME flow the sandbox never runs.
 
-Removing these is safe on nginx today and reduces the migration surface by four keys, from 15 to 11.
+Removing these is safe on nginx today. Three of the four are nginx keys, so the migration surface drops from
+15 keys to 12; the fourth belongs to cert-manager and disappears from the adjacent list.
 
 → [use-regex ↓](#reg-use-regex) · [backend-protocol ↓](#reg-backend-protocol) · [proxy-connect-timeout ↓](#reg-proxy-connect-timeout)
 
 ### `CLEANUP` — The snippet-annotations setting is inconsistent between the two sandboxes
 
-The current sandbox sets `allowSnippetAnnotations: "false"` ([`ingress-nginx.yaml:59`](https://github.com/OKDP/sandbox-dependencies/blob/4f5b209f5295964bc97e6d9e74e1d508e684abe8/packages/system/ingress-nginx/ingress-nginx.yaml#L59)) — a deliberate hardening change made to mitigate CVE-2026-42945. The successor sandbox's copy of the same package sets it to `"true"` ([`ingress-nginx.yaml:43`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a2e0c04e315a9a39340ba2621aa84/packages/system/ingress-nginx/ingress-nginx.yaml#L43)).
+The current sandbox sets `allowSnippetAnnotations: "false"` ([`ingress-nginx.yaml:59`](https://github.com/OKDP/sandbox-dependencies/blob/0da14d14cb21/packages/system/ingress-nginx/ingress-nginx.yaml#L59)) — a deliberate hardening change made to mitigate CVE-2026-42945. The successor sandbox's copy of the same package sets it to `"true"` ([`ingress-nginx.yaml:43`](https://github.com/OKDP/okdp-control-plane-dev-sandbox/blob/d54f3c05b67a/packages/system/ingress-nginx/ingress-nginx.yaml#L43)).
 
 Not a migration issue as such — the setting disappears with nginx — but the successor environment currently carries a risk the current one was explicitly fixed for.
+
+### `RESOLVED` — Class variabilisation, closed 21 August 2026
+
+Kept for the audit trail. At the 19 August scan the class name was hardcoded in 16 Ingress objects and two
+PRs were open to variabilise it, both incomplete: [platform-packages#52](https://github.com/OKDP/platform-packages/pull/52)
+left the legacy `kubernetes.io/ingress.class: nginx` annotation on Airflow and Superset, and
+[sandbox-dependencies#20](https://github.com/OKDP/sandbox-dependencies/pull/20) converted the SeaweedFS filer
+Ingress but not the S3 Ingress in the same file.
+
+Both gaps were closed before merge. `#20` was force-pushed on 21 August to pick up the S3 Ingress; the leftover
+legacy annotations were variabilised by
+[`45137e9`](https://github.com/OKDP/platform-packages/commit/45137e928afca8f6d34fcbf46e5e5f93c4c57ad6) the same
+day. Sixteen hardcoded Ingress objects became three, none of them in `platform-packages` or the current
+sandbox's own services.
+
+What remains is upkeep, not migration work — and it is already slipping: `vault.yaml` landed in
+`sandbox-dependencies` after the merges with `ingressClassName: nginx` written straight back in. A CI check on
+`ingressClassName:\s*nginx` would hold the line more reliably than review will.
+
+→ [all 15 class bindings ↓](#reg-class-bindings)
 
 ---
 
 ## 7. Traefik versus Cilium
 
-On annotations alone.
+On annotations alone. Cilium columns are scored against the pinned **Cilium 1.19 / Gateway API v1.4**, not
+against the specifications in the abstract — see [method](#8-method-and-confidence).
 
 | | Traefik | Cilium Ingress | Gateway API on Cilium |
 |---|---|---|---|
 | **Redundant today** | 2 of 15 — `use-regex` and `backend-protocol` do nothing on nginx as configured | ← | ← |
-| **Direct equivalent** | 1 — body size | 0 | 1 — HTTPS redirect |
-| **Needs rework** | 12 — five middlewares and one ServersTransport cover all of them | 1 — force-https, under a different key | 7 — route timeouts and CORS |
-| **No equivalent** | 0 | **12** | **5** — body size, buffer size, basic auth ×3 |
+| **Direct equivalent** | 1 — body size | 1 — read timeout, via `request-timeout` | 2 — HTTPS redirect, request timeout |
+| **Needs rework** | 12 — five middlewares and one ServersTransport cover all of them | 2 — force-https under a different key; send timeout folds into the read timeout | 2 — send timeout folds in; connect timeout becomes `backendRequest` |
+| **No equivalent** | 0 | **10** | **9** — body size, buffer size, basic auth ×3, CORS ×4 |
 | **Infrastructure change** | Controller swap only. No CNI impact. | Requires Cilium as the cluster CNI, replacing kindnet and kube-proxy. | Same CNI requirement. |
 | **Routing model** | Ingress objects kept; behaviour moves into Middleware CRDs. | Ingress objects kept; most behaviour is simply lost. | Ingress replaced by Gateway + HTTPRoute. Larger rewrite, but annotations become typed, reviewable fields. |
 
-Read across the bottom rows: **Cilium Ingress is the weakest destination of the three.** It carries the
-full cost of the CNI change while giving back less than Traefik does on annotations. If the destination is
-Cilium, going to **Gateway API directly** rather than stopping at Cilium Ingress avoids translating the
-same annotations twice — which matches the staging already chosen for the sandbox migration.
+Read across the bottom rows: **Cilium Ingress is still the weakest destination of the three.** It carries the
+full cost of the CNI change while giving back far less than Traefik does on annotations — though less badly
+than the 19 August scan suggested, because `ingress.cilium.io/request-timeout` does cover the timeout case.
+
+Between the two Cilium routes, **Gateway API is the better target**: it answers the timeout question properly
+and turns annotations into typed fields. But it does not rescue the two security annotations. Cilium 1.19
+reports `HTTPRouteCORS` as unsupported ([conformance report](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml)), and basic auth is not in Gateway API
+at all — so **CORS and basic auth need a destination decided independently of which Cilium mode is chosen.**
+That is the one conclusion that does not change with the version you pin.
 
 ---
 
 ## 8. Method and confidence
 
 **Method.** All 27 repositories in the OKDP GitHub organisation were cloned at their default branch on
-19 August 2026 and searched exhaustively for controller-vendor annotation prefixes (nginx, Traefik,
+24 August 2026 and searched exhaustively for controller-vendor annotation prefixes (nginx, Traefik,
 HAProxy, Kong, ALB, Contour, Cilium), for `ingressClassName` and the legacy class annotation, and for the
 nginx feature keywords *not* present in the inventory — snippets, external auth, rewrite targets, session
-affinity, rate limits and TLS passthrough. Counts were cross-checked against GitHub code search. Open pull
-requests in the five package and cluster repositories were reviewed for in-flight changes.
+affinity, rate limits and TLS passthrough. None of those keywords appears anywhere in the organisation, and
+no non-nginx controller annotation does either. Pull requests in the package and cluster repositories were
+reviewed for in-flight changes, including force-pushes that post-date an earlier scan.
+
+**Cilium claims are version-pinned, not documentation-derived.** The sandbox migration targets **Cilium
+1.19.6** with **Gateway API v1.4.1** CRDs. Annotation support is read from Cilium's own
+[ingress annotation table](https://github.com/cilium/cilium/blob/v1.19.6/operator/pkg/ingress/annotations/annotations.go) — which is where `force-https`, `request-timeout`, `tls-passthrough` and
+`insecure-node-port` / `secure-node-port` are defined. Gateway API feature support is read from Cilium's
+[conformance report for Gateway API v1.4](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/v1.4.0/cilium/experimental-v1.19.0-pre.2-default-report.yaml), published for the 1.19 line (`1.19.0-pre.2`), which lists `HTTPRouteRequestTimeout` and
+`HTTPRouteBackendTimeout` as supported and `HTTPRouteCORS` as **unsupported**. Re-check both if you pin a
+different Cilium version; they are the two inputs that would change this document's conclusions.
 
 **Confidence.** The inventory itself — which annotations exist, with what values, in which files — is
-exhaustive for default branches. The Traefik and Cilium mappings are based on each project's documented
-feature set; where a capability is recent or version-dependent (Cilium's `force-https` annotation, Gateway
-API CORS filter support, HTTPRoute timeout support), the text says so explicitly and those three should be
-verified against the exact versions you pin before being relied on in a plan.
+exhaustive for default branches. Traefik mappings are based on documented feature sets and have not been
+exercised on a cluster.
 
 **Not covered.** Feature branches, forks outside the organisation, and any annotation applied at runtime
 rather than committed to a repository.
 
-**Pinned commits.** Every file:line link resolves against the commit that was scanned, so it stays correct
-as the files move. Line numbers are only valid at these commits — re-run the scan before quoting them
-against a later branch state.
+**Pinned commits.** Every file:line link resolves against the commit below, so it stays correct as the files
+move. Line numbers are only valid at these commits — re-run the scan before quoting them against a later
+branch state. All 113 links were verified to resolve against these commits at compile time.
 
-| Repository | Commit |
-|---|---|
-| `helm-charts-utilities` | `c82dddb9afa6` |
-| `okdp-control-plane-dev-sandbox` | `d54f3c05b67a` |
-| `okdp-control-plane-packages` | `a6e3c299d7a1` |
-| `okdp-control-plane-ui` | `7b7f82bd3984` |
-| `okdp-sandbox` | `00570d45511c` |
-| `okdp-superset` | `5230d594eb47` |
-| `platform-packages` | `800a8fac3391` |
-| `sandbox-dependencies` | `4f5b209f5295` |
-| `spark-history-server` | `8ae9eb68b7ec` |
+| Repository | Commit | Note |
+|---|---|---|
+| `helm-charts-utilities` | `c82dddb9afa6` | |
+| `hive-metastore` | `b3f1eb6e31ee` | MetalLB annotations only |
+| `okdp-control-plane-dev-sandbox` | `d54f3c05b67a` | |
+| `okdp-control-plane-packages` | `a6e3c299d7a1` | |
+| `okdp-control-plane-ui` | `047e8ff09ec1` | |
+| `okdp-sandbox` | `6650e737d351` | |
+| `okdp-server` | `174c5e83de2c` | chart samples only |
+| `okdp-superset` | `5230d594eb47` | |
+| `okdp-ui` | `0ad1e75f84d6` | chart samples only |
+| `platform-packages` | `f2a6c0871d6a` | |
+| `polaris-console` | `541027b592c5` | commented sample only |
+| `sandbox-dependencies` | `0da14d14cb21` | |
+| `spark-history-server` | `8ae9eb68b7ec` | |
+| `spark-web-proxy` | `547e02ac3f19` | chart samples only |
 
+**Superseded scan.** This document replaces a 19 August 2026 inventory. The material differences: the class
+variabilisation PRs merged on 21 August, taking hardcoded Ingress classes from 16 to 3; the `okdp-ui`
+package was replaced by `okdp-control-plane-ui`, removing three annotations; JupyterHub gained a
+`proxy-body-size`; and `sandbox-dependencies` gained a Vault package that reintroduced a hardcoded class.
+Live annotation instances went from 31 to 29.
