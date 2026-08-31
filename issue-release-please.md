@@ -71,7 +71,7 @@ Make release-please own the version, one release unit per package.
 
 ```json
 {
-  "separate-pull-requests": true,
+  "separate-pull-requests": false,
   "include-v-in-tag": true,
   "packages": {
     "packages/services/trino": {
@@ -81,16 +81,33 @@ Make release-please own the version, one release unit per package.
       "include-component-in-tag": true,
       "tag-separator": "/",
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["trino.yaml"]
+      "extra-files": [
+        { "type": "generic", "path": "trino.yaml" }
+      ]
     }
-    // ... one block per package
   }
 }
 ```
 
-**2. release-please writes the OCI tag.** `extra-files` plus the generic updater
-annotation means the field is rewritten on every release PR and never touched by
-hand again:
+The file is **strict JSON — no comments allowed**, and there is no auto-discovery:
+release-please never scans for packages, so every one gets its own block, written
+by hand once. Three details that are easy to get wrong:
+
+- `separate-pull-requests: false` groups every pending package into one release PR.
+  Cross-cutting commits are normal here — `9f28ef6` touched eight packages — so
+  this is one review instead of eight.
+- `extra-files` must use the **object** form with `"type": "generic"`. The bare
+  string `["trino.yaml"]` selects release-please's default YAML updater, which
+  looks for a `version:` key; these manifests have `tag:`, so it would silently do
+  nothing and the published tag would never move.
+- `path` inside `extra-files` is resolved **relative to the package path** above,
+  so it is just the filename (verified in release-please's base strategy:
+  `path: this.addPath(path)`).
+
+**2. release-please writes the OCI tag.** The `generic` updater does a line-level
+text replacement on any line carrying an `x-release-please-version` annotation —
+it does not parse the YAML, so the rest of the manifest is untouched. The field is
+rewritten on every release PR and never edited by hand again:
 
 ```yaml
 apiVersion: v1alpha1
@@ -163,7 +180,16 @@ long. Worth reconsidering only if losing `480` from the tag turns out to hurt in
 practice — `description` and the changelog are meant to cover that.
 
 **One release unit for the whole repo.** Simpler to configure, but bumping Trino
-would re-release Superset, which is close to the problem being left behind.
+would re-release Superset, which is close to the problem being left behind. Note
+this is *not* the same as `separate-pull-requests: false` above: that still gives
+each package its own version and its own tag, and only groups the release PR.
+
+**`separate-pull-requests: true`**, one release PR per package, as
+`helm-charts-utilities` does. Right when charts move independently; wrong here.
+`9f28ef6` ("variabilize the ingressClassName") touched eight packages, and
+`45137e9` touched two — that would have been eight and two separate release PRs to
+merge one at a time. The cost of grouping is that merging the PR ships everything
+pending, so a package cannot be held back on its own.
 
 **Merge the existing release PR ‹#18 | #2› as-is.** It would cut `v0.3.0` and fire
 `publish.yml`, publishing at whatever hand-written tags happen to be in the YAML.

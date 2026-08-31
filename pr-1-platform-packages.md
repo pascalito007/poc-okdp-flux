@@ -1,6 +1,8 @@
 # PR 1 — `OKDP/platform-packages`
 
 > Org PR template: [`OKDP/.github/PULL_REQUEST_TEMPLATE.md`](https://github.com/OKDP/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
+> **MERGED** as #67 on 28 Aug 12:27 UTC. Kept for the record; the `tag-must-move`
+> addendum went in with it.
 > Branch: `chore/publish-guardrails`, one commit on top of `f2a6c08`.
 > Patch: `phase1-platform-packages.patch` (git-am format) / `phase1-platform-packages.diff`.
 

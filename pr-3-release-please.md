@@ -1,8 +1,10 @@
 # PR 3 — `OKDP/platform-packages` — Phase 2, release-please
 
 > Org PR template: [`OKDP/.github/PULL_REQUEST_TEMPLATE.md`](https://github.com/OKDP/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
-> **Stacks on PR 1** (`chore/publish-guardrails`). Don't open it until that is merged.
-> A prepared branch exists as `chore/release-please` on top of PR 1's head.
+> **PR 1 is merged** (#67, 28 Aug). Apply this onto a fresh branch off `main`.
+> The prepared `chore/release-please` branch sits on PR 1's *pre-merge* head and
+> predates the `tag-must-move` guard added in `a7fab2e` — re-apply from this
+> document rather than rebasing that branch.
 
 ### Title
 
@@ -69,6 +71,14 @@ tag already being present means something is genuinely wrong.
 `push: branches: [main]`, the documented trigger, which additionally covers
 direct pushes.
 
+**The interim tag guard is removed.** `tag-must-move` — the `ci.yml` job and
+`.github/scripts/tag-must-move.sh` — fails a pull request that edits a package
+without bumping its `tag:`. From here on that is what *every* package change
+looks like: the developer must not touch `tag:`, release-please writes it at
+release time. Left in place the guard would block all package work. It was
+labelled interim in both the job comment and the script header; this is the
+handover it was waiting for. The `[no-publish]` escape hatch goes with it.
+
 **Shared charts are guarded.** `airflow`, `superset` and `trino` embed
 `charts/internal-secrets` by relative path, and `jupyterhub` embeds
 `charts/oidc-client`. release-please assigns commits to packages *by directory*,
@@ -114,16 +124,23 @@ not just a pull request.
    `CHANGELOG.md` and a `tag:` rewrite. Nothing is published yet.
 
 3. **Publishing follows the release.** Merge that pull request; release-please
-   creates `trino/v1.0.0` and friends, then publishes **only** the released
-   packages. The job log line `Processing: ...` names them.
+   creates the tags — `trino/v1.0.1` for a `fix:`, `trino/v1.1.0` for a `feat:`,
+   counting up from the `1.0.0` baseline — then publishes **only** the released
+   packages. The job log line `Processing: ...` names them. Note it is *not*
+   `v1.0.0`: that is the floor this pull request establishes, not the first
+   release. See **After merging** for making that floor real.
 
-4. **The shared-chart guard.** Open a pull request changing only
+4. **The old guard is gone.** Open a pull request editing `trino.yaml` without
+   touching `tag:`. Before this change `tag-must-move` fails it; after, CI is
+   green and the `fix:` or `feat:` title is what decides the version.
+
+5. **The shared-chart guard.** Open a pull request changing only
    `charts/oidc-client/templates/client.yaml`. The `shared-charts` job fails with
    "charts/oidc-client is embedded by packages/services/jupyterhub, but nothing
    under packages/services/jupyterhub changed". Touch `jupyterhub.yaml` as well
    and it passes.
 
-5. **Dry-run on a fork first.** Every failure mode in this mechanism is silent —
+6. **Dry-run on a fork first.** Every failure mode in this mechanism is silent —
    a wrong `extra-files` form, a missing annotation, or a version that does not
    match `X.Y.Z` all produce a perfect-looking release PR whose published tag
    never moves.
@@ -141,7 +158,8 @@ not just a pull request.
 
 ## Making the changes by hand
 
-Six edits. The first three are mechanical, the last three are workflow wiring.
+Seven edits, then one action after merging. The first three are mechanical, the
+last four are workflow wiring.
 
 ### 1. Replace `release-please-config.json`
 
@@ -388,6 +406,12 @@ Currently `{}`. This is the scoreboard release-please keeps from here on.
 }
 ```
 
+This asserts that every package *has already been released* at `1.0.0`, so the
+first release-please run counts up from there — `1.0.1` or `1.1.0`, never
+`1.0.0` itself. Make the assertion true once this is merged: see **After
+merging** below. Left false, `main` declares a `tag:` the registry does not
+have, and release-please has no tag to scan commits from.
+
 ### 3. Annotate the thirteen manifests
 
 In **each** package manifest, replace the `tag:` line:
@@ -550,7 +574,31 @@ jobs:
     secrets: inherit
 ```
 
-### 6. Guard the shared charts
+### 6. Remove the interim tag guard
+
+`tag-must-move` fails a pull request that edits a package without bumping its
+`tag:`. From here on the developer must *not* bump it, so the guard would fail
+every package pull request. Both pieces say so themselves:
+
+```
+.github/workflows/ci.yml   # INTERIM: delete this job when release-please owns the tag (Phase 2).
+tag-must-move.sh           # once release-please owns the tag, [...] this script must be removed.
+```
+
+In `.github/workflows/ci.yml`, delete the whole first job — the three comment
+lines under `jobs:` through the `bash .github/scripts/tag-must-move.sh ...`
+line — leaving `get-package-oci-prefix:` as the first job. Then:
+
+```sh
+git rm .github/scripts/tag-must-move.sh
+grep -rn tag-must-move .github/ || echo "guard removed"
+```
+
+The `[no-publish]` escape hatch in the pull-request body disappears with it; it
+has no meaning once publishing is driven by releases. Worth a line in the
+announcement, since reviewers have been told to use it.
+
+### 7. Guard the shared charts
 
 New file `.github/scripts/shared-chart-consumers.sh`:
 
@@ -610,7 +658,8 @@ exit ${status}
 chmod +x .github/scripts/shared-chart-consumers.sh
 ```
 
-and a new job at the top of `jobs:` in `.github/workflows/ci.yml`:
+and a new job in `.github/workflows/ci.yml`, in the slot the deleted
+`tag-must-move` job just vacated at the top of `jobs:`:
 
 ```yaml
   shared-charts:
@@ -637,8 +686,50 @@ and a new job at the top of `jobs:` in `.github/workflows/ci.yml`:
 python3 -c "import json;[json.load(open(f)) for f in ['release-please-config.json','.release-please-manifest.json']];print('json ok')"
 for f in .github/workflows/*.yml; do python3 -c "import yaml;yaml.safe_load(open('$f'))" || echo "BAD $f"; done
 bash -n .github/scripts/shared-chart-consumers.sh
-git diff --stat        # expect 19 files
+grep -rn tag-must-move .github/ || echo "guard removed"
+git diff --stat        # expect 20 files, incl. the deleted tag-must-move.sh
 ```
+
+---
+
+## After merging: make the `1.0.0` baseline real
+
+The manifest claims each package was released at `1.0.0`. Nothing in this pull
+request publishes that, and release-please will not either — it counts *up* from
+the number it finds. Two gaps follow, and one pair of actions closes both:
+
+- `main` declares `tag: 1.0.0` in thirteen manifests while the registry has no
+  `1.0.0`. Anyone resolving a package straight from `main` gets a tag that does
+  not exist, until the first release lands.
+- release-please finds no git tag matching `airflow/v1.0.0`, so it has no commit
+  to scan from, and the first release pull request's changelog can swallow the
+  entire repository history.
+
+Once this is on `main`:
+
+1. **Tag the merge commit**, thirteen times:
+
+```sh
+for c in airflow hive-metastore jupyterhub okdp-examples polaris \
+         spark-defaults spark-history-server spark-operator spark-rbac \
+         superset trino okdp-control-plane-server okdp-control-plane-ui
+do
+  git tag "${c}/v1.0.0"
+done
+git push origin --tags
+```
+
+2. **Publish the baseline once.** Actions → **publish** → Run workflow. It calls
+   the template without `on_existing_tag`, which defaults to `skip` — right for
+   this run, since none of the thirteen `1.0.0` tags exist yet. Expect thirteen
+   `build and push` and no skips.
+
+The manifest, the git tags, the registry and the `tag:` lines then all agree,
+and release-please starts from a true anchor.
+
+`bootstrap-sha` in `release-please-config.json` is the alternative to step 1,
+but it fixes only the changelog window — the registry would still be missing
+`1.0.0`. Do both steps.
 
 ---
 
@@ -660,6 +751,14 @@ git diff --stat        # expect 19 files
   and produces tag `1.0.0`. An `appVersion:` key is **rejected** —
   `json: unknown field "appVersion"` — which is why the upstream version belongs
   in `description:` rather than a new field.
+
+**Re-checked against `origin/main` on 31 Aug**, after PR 1 merged. Every anchor
+in steps 1–5 and 7 still holds: thirteen packages at the same paths, the
+manifest still `{}`, the `on_existing_tag` input still present, and the **Find
+KuboCD packages** step byte-identical to the block step 4 replaces. The only
+drift in `kubocd-package-template.yml` since is `07fd28a` (`rc=0; out=$(...) ||
+rc=$?`), a different region — no conflict. Step 6 is new: `tag-must-move` landed
+in `a7fab2e` after this document was first written.
 
 ## Not in this PR
 

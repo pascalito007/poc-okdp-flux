@@ -1,6 +1,8 @@
 # PR 2 — `OKDP/sandbox-dependencies`
 
 > Org PR template: [`OKDP/.github/PULL_REQUEST_TEMPLATE.md`](https://github.com/OKDP/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
+> **MERGED** as #32 on 28 Aug 12:26 UTC (head `88986cf`, four commits). Kept for
+> the record; the `tag-must-move` addendum went in with it.
 > Branch: `chore/publish-guardrails`, one commit on top of `origin/main`.
 > Patch: `phase1-sandbox-dependencies.patch` (git-am format) / `phase1-sandbox-dependencies.diff`.
 > Identical to PR 1 in `platform-packages` apart from the package-prefix description string.
