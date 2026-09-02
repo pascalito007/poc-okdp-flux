@@ -23,9 +23,22 @@ nothing keeps them in step:
 
 Bumping one package therefore means four edits. Copy 3 is what the Control Plane
 server serves to the console: `context_repository.go` reads `versions` and
-`default` straight off the Context, and the console renders them in that order
-(`versionOptionsFor`, `service-utils.ts`). Nothing queries the registry and nothing
-sorts, so whatever is written in the file is exactly what an operator is offered.
+`default` straight off the Context, and the console renders them in the order the
+server supplies (`versionOptionsFor`, `service-utils.ts`, which does not sort).
+
+**Corrected 2 Sep 2026 — the sentence here previously read "Nothing queries the
+registry and nothing sorts".** That stopped being true on 20 Aug. At
+`okdp-control-plane-server` `9014410`, `GetServiceVersions` and
+`ListVersionsForServices` both list tags **live from the registry** via
+`listOCITags`, and copy 3's `versions:` is only the fallback used when that call
+fails. `default:` is still read straight from the Context and is what the console
+labels *(recommended)*.
+
+That makes the duplication worse, not better: copy 3's `versions:` list is
+largely dead weight — the registry is already the source of truth for what exists
+— while `default:` remains hand-maintained and is the copy that actually drifts.
+The server also sorts those tags lexicographically, which is its own defect;
+see the version-ordering issue and `pr-7-control-plane-server-version-order.md`.
 
 When copy 3 lags behind copy 2, the console offers a version that is not the one
 the cluster is running — and because each service currently lists exactly one
@@ -109,7 +122,8 @@ self-corrected as a side effect of the next bump, not through any mechanism.
 - `okdp-sandbox` `origin/main` as of 2026-08-26 (`84acc00`)
 - `okdp-control-plane-server` v0.7.1 — no semver dependency in `go.mod`; the
   catalog is served verbatim from the Context
-- `okdp-control-plane-ui` v0.7.0 — `versionOptionsFor()` does not sort
+- `okdp-control-plane-ui` v0.7.0 — `versionOptionsFor()` does not sort; the
+  ordering comes from the server
 
 ### Logs
 

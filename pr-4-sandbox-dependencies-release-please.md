@@ -16,6 +16,14 @@
 3. **The README carries a version table** that PR 3's repo does not — a fourth
    hand-maintained copy of every version, and it is already wrong (see step 6).
 
+### Branch
+
+```
+chore/release-workflow
+```
+
+Off `main`. This is the branch PR #37 actually uses.
+
 ### Title
 
 ```
@@ -28,6 +36,11 @@ release-please assigns commits by directory. A `feat:` title would open every
 one of the fourteen new changelogs with a spurious "Features: let release-please
 own the package versions" entry and force a minor bump on all of them. `chore`
 is not in `changelog-sections`, so it contributes nothing.
+
+**Commits.** `conventional-commits.yml` validates every commit in the pull
+request, not the title, so each commit must be conventional on its own. Keep
+them `chore:` for the same reason as the title: on a squash merge the title is
+what release-please reads, but on a merge or rebase the individual subjects are.
 
 ### Body
 

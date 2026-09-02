@@ -6,11 +6,31 @@
 > predates the `tag-must-move` guard added in `a7fab2e` — re-apply from this
 > document rather than rebasing that branch.
 
+### Branch
+
+```
+chore/release-please
+```
+
+Off `main`. This is the branch PR #74 actually uses.
+
 ### Title
 
 ```
-feat(ci): let release-please own the package versions
+chore(ci): let release-please own the package versions
 ```
+
+Deliberately `chore:`, not `feat:`. If this is squash-merged the title becomes
+the subject of one commit touching all thirteen package directories, and
+release-please assigns commits by directory. A `feat:` title would open every
+one of the thirteen new changelogs with a spurious "Features: let release-please
+own the package versions" entry and force a minor bump on all of them. `chore`
+is not in `changelog-sections`, so it contributes nothing.
+
+**Commits.** `conventional-commits.yml` validates every commit in the pull
+request, not the title, so each commit must be conventional on its own. Keep
+them `chore:` for the same reason as the title: on a squash merge the title is
+what release-please reads, but on a merge or rebase the individual subjects are.
 
 ### Body
 
@@ -128,7 +148,7 @@ not just a pull request.
    counting up from the `1.0.0` baseline — then publishes **only** the released
    packages. The job log line `Processing: ...` names them. Note it is *not*
    `v1.0.0`: that is the floor this pull request establishes, not the first
-   release. See **After merging** for making that floor real.
+   release. See **Before merging** for making that floor real.
 
 4. **The old guard is gone.** Open a pull request editing `trino.yaml` without
    touching `tag:`. Before this change `tag-must-move` fails it; after, CI is
@@ -431,10 +451,18 @@ The whole set at once (macOS `sed`; drop the `''` on Linux):
 ```sh
 for f in packages/*/*/*.yaml; do
   grep -q '^modules:' "$f" || continue
-  sed -i '' '0,/^tag: /s//tag: 1.0.0 # x-release-please-version/' "$f"
+  sed -i '' 's/^tag: .*/tag: 1.0.0 # x-release-please-version/' "$f"
 done
 git diff --stat        # expect 13 files, one line each
 ```
+
+> **Corrected 1 Sep.** This previously read
+> `sed -i '' '0,/^tag: /s//.../'`. `0,/re/` is a GNU extension: BSD/macOS `sed`
+> accepts it, exits 0 and changes nothing. Verified — the command ran clean and
+> left an empty `git diff`. The plain substitution above is safe because every
+> manifest has exactly one line starting `tag:` at column zero; nested `tag:`
+> keys are indented. Checked against `jupyterhub.yaml`, which has three of them:
+> one line changes.
 
 ### 4. Teach the package template to publish a subset
 
@@ -585,14 +613,36 @@ every package pull request. Both pieces say so themselves:
 tag-must-move.sh           # once release-please owns the tag, [...] this script must be removed.
 ```
 
-In `.github/workflows/ci.yml`, delete the whole first job — the three comment
-lines under `jobs:` through the `bash .github/scripts/tag-must-move.sh ...`
-line — leaving `get-package-oci-prefix:` as the first job. Then:
+Two deletions, and only one of them is a whole file.
+
+**`.github/workflows/ci.yml` — keep the file, delete the first job.** That is
+lines 60–77 as `main` stands today: the three comment lines under `jobs:` through
+the `bash .github/scripts/tag-must-move.sh ...` line. `get-package-oci-prefix:`
+becomes the first job, and `kubocd-packages-ci` is untouched — deleting `ci.yml`
+itself would take the whole build with it.
+
+```yaml
+ 59  jobs:
+ 60    # The publish job skips a tag that already exists, so a package edited without  ⎫
+ 61    # a tag bump is silently never published. Catch it at review time.              ⎪
+ 62    # INTERIM: delete this job when release-please owns the tag (Phase 2).          ⎪
+ 63    tag-must-move:                                                                  ⎬ delete
+ ..    ...                                                                            ⎪
+ 77          bash .github/scripts/tag-must-move.sh FETCH_HEAD "${CHANGED[@]:-}"        ⎭
+ 78    get-package-oci-prefix:        <- becomes the first job
+```
+
+**`.github/scripts/tag-must-move.sh` — delete the whole file.** It exists only
+for that job.
 
 ```sh
 git rm .github/scripts/tag-must-move.sh
 grep -rn tag-must-move .github/ || echo "guard removed"
 ```
+
+Checked against the real file: after the cut `ci.yml` still parses and `jobs`
+reads `['get-package-oci-prefix', 'kubocd-packages-ci']`. Step 7 puts the new
+`shared-charts` job in the gap, bringing it back to three.
 
 The `[no-publish]` escape hatch in the pull-request body disappears with it; it
 has no meaning once publishing is driven by releases. Worth a line in the
@@ -692,46 +742,96 @@ git diff --stat        # expect 20 files, incl. the deleted tag-must-move.sh
 
 ---
 
-## After merging: make the `1.0.0` baseline real
+## Before merging: create the thirteen baseline tags
 
-The manifest claims each package was released at `1.0.0`. Nothing in this pull
-request publishes that, and release-please will not either — it counts *up* from
-the number it finds. Two gaps follow, and one pair of actions closes both:
+**Corrected 1 Sep — this used to sit under "After merging".** That order does
+not work. `release-please.yml` fires on push to `main`, so the first run starts
+the instant this merges; in a fork dry-run it completed in about 15 seconds.
+With no tags present release-please has no scan floor: it reads every commit in
+each package's history and opens a release pull request whose changelogs cover
+the entire repository. Tagging afterwards is too late — the bogus release pull
+request already exists.
 
-- `main` declares `tag: 1.0.0` in thirteen manifests while the registry has no
-  `1.0.0`. Anyone resolving a package straight from `main` gets a tag that does
-  not exist, until the first release lands.
-- release-please finds no git tag matching `airflow/v1.0.0`, so it has no commit
-  to scan from, and the first release pull request's changelog can swallow the
-  entire repository history.
-
-Once this is on `main`:
-
-1. **Tag the merge commit**, thirteen times:
+Git tags are independent of this pull request, so create them on `main` as it
+stands today, shortly before merging:
 
 ```sh
+git fetch origin
 for c in airflow hive-metastore jupyterhub okdp-examples polaris \
          spark-defaults spark-history-server spark-operator spark-rbac \
          superset trino okdp-control-plane-server okdp-control-plane-ui
 do
-  git tag "${c}/v1.0.0"
+  git tag "${c}/v1.0.0" origin/main
+  git push origin "refs/tags/${c}/v1.0.0"
 done
-git push origin --tags
+git ls-remote --tags origin | wc -l        # expect 13
 ```
 
-2. **Publish the baseline once.** Actions → **publish** → Run workflow. It calls
-   the template without `on_existing_tag`, which defaults to `skip` — right for
-   this run, since none of the thirteen `1.0.0` tags exist yet. Expect thirteen
-   `build and push` and no skips.
+This creates lightweight git tags and nothing else: no GitHub Releases, no
+workflow runs (`release-please.yml` and `ci.yml` both trigger on branches, not
+tags), no publishes. Reversible with `git push origin :refs/tags/<name>`.
+
+Verified in a fork of this repository: with the tags in place, the first
+release-please run after the merge logged `No user facing commits found since
+<sha>` once per component — thirteen times — and opened no release pull request.
+
+Any `fix:`/`feat:` that lands on `main` between tagging and merging will
+legitimately appear in the first release pull request. That is correct
+behaviour, just something to expect.
+
+`bootstrap-sha` in `release-please-config.json` is the alternative, but it fixes
+only the changelog window — the registry would still be missing `1.0.0`.
+
+**Done on `OKDP/platform-packages` on 1 Sep 2026:** all thirteen tags exist on
+`dee31fd`, `main`'s head. Verified — thirteen tags, no Releases, no runs
+triggered.
+
+## After merging: publish the baseline once
+
+The manifest and the git tags now agree, but the registry still has no `1.0.0`
+for any package, so `main` declares a `tag:` the registry does not have.
+
+Actions → **publish** → Run workflow. It calls the template without
+`on_existing_tag`, which defaults to `skip` — right for this run, since none of
+the thirteen `1.0.0` tags exist yet. Expect thirteen `build and push` and no
+skips.
 
 The manifest, the git tags, the registry and the `tag:` lines then all agree,
 and release-please starts from a true anchor.
 
-`bootstrap-sha` in `release-please-config.json` is the alternative to step 1,
-but it fixes only the changelog window — the registry would still be missing
-`1.0.0`. Do both steps.
-
 ---
+
+## Proven on a runner — fork dry-run, 1 Sep 2026
+
+Applied to a fork of this repository (`pascalito007/platform-packages`) with two
+fork-only overrides (`repository_owner`, and `publish_to_registry: "false"` so
+artifacts went to the fork's own ghcr namespace). Every step below is a log
+line, not a prediction:
+
+- **Baseline tags anchor release-please.** First run: `No user facing commits
+  found since dee31fd` — thirteen times, once per component. No release PR.
+- **The publish gate holds.** `paths_released` was `[]`, so
+  `get-package-oci-prefix` and `publish` both reported `skipped`.
+- **`chore:` does not cut a release.** Three chore commits produced nothing.
+- **One `fix(trino):` produced one release PR**, `chore: release main`, draft —
+  not thirteen PRs. It bumped **only** trino, to **`1.0.1`**, changed exactly
+  **one line** in `trino.yaml` (`tag:`, annotation preserved), and created
+  `packages/services/trino/CHANGELOG.md` with the compare link
+  `trino/v1.0.0...trino/v1.0.1`.
+- **Merging it minted `trino/v1.0.1`** plus one GitHub Release, then the publish
+  job logged `PACKAGE_PATHS: ["packages/services/trino"]` →
+  `Processing: packages/services/trino/trino.yaml` → one `kubocd package` call →
+  `push OCI image: .../trino:1.0.1` → `Successfully pushed`.
+
+**Not covered by the dry-run:** `on_existing_tag: "fail"` and the skip/plan
+table. With `publish_to_registry: "false"` the *Drop packages already published*
+step is skipped entirely — the CI registry is a scratch area that must always
+rebuild. That path still needs a real run with quay credentials.
+
+Two fork-only frictions, neither a defect in this change: a fresh fork does not
+run workflows until Actions are toggled off and on again, and its release PR's
+checks sit unapproved (`0` jobs). Upstream, `OKDP` release PR #18 carries five
+passing checks, so neither applies here.
 
 ## Verified before writing this
 

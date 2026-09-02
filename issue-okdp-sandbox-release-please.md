@@ -5,6 +5,9 @@
 > which supplies the `Fixes #` number.
 > Agreed with `idirze` (1 Sep 2026), who removed it in #58 and confirmed the
 > reason no longer applies.
+> **Filed 2 Sep 2026 as `OKDP/okdp-sandbox#93`** — this document is kept for the
+> reasoning and the `1.0.0` / `0.6.0` decision, which the filed issue summarises
+> more briefly.
 
 ### Title
 

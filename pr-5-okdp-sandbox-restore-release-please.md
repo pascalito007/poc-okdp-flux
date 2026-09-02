@@ -55,10 +55,50 @@ first release pull request proposes **`okdp-sandbox v1.0.0`**.
 Either is defensible. What is not defensible is discovering it from a surprise
 release pull request titled `chore(main): release 1.0.0`.
 
+### Branch
+
+```
+ci/restore-release-please
+```
+
+Off `main`. Matches this repository's convention of `<commit-type>/<kebab-description>`
+(`fix/jupyterhub-storage-endpoint`, `chore/bump-local-secrets-provider-p05`,
+`feat/cilium-cni-integration`).
+
 ### Title
 
 ```
 ci: restore release-please for the sandbox
+```
+
+### Commit
+
+One commit, subject matching the title. `conventional-commits.yml` validates
+**every** commit in the pull request, not the title, so each must be conventional
+in its own right — several commits are fine if you prefer.
+
+The type matters more than usual here: this repository is a single release unit,
+so this pull request's own merge commit feeds its next version. `ci:` does not
+bump and adds no changelog entry, which is right — the version comes from the 58
+commits already waiting. A `feat:` would put a spurious
+"restore release-please" line in the first changelog.
+
+```
+ci: restore release-please for the sandbox
+
+Removed in #58, when the repository was reduced to a README-focused entry
+point and had nothing to version. clusters/ was restored on 8 July and now
+holds 32 of the repository's 41 files, but the release automation never came
+back — last release v0.5.0, 58 commits ago.
+
+Restores release-please-config.json (without extra-files: README.md, whose
+only version string is a KuboCD badge) and release-please.yml (without its
+publish job — publish.yml was legitimately deleted in #58).
+
+.release-please-manifest.json is unchanged: v0.5.0 and its tag are real, so
+the anchor already exists.
+
+Refs #57, #58
 ```
 
 ### Body
@@ -107,7 +147,9 @@ anchor at `0.5.0`.
 
 ## Related Issue
 
-Refs #57, #58 — the migration this completes.
+Fixes #93
+
+Completes the migration begun in #57 / #58.
 
 ## Type of Change
 
