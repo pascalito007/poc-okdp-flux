@@ -1,0 +1,1725 @@
+From 2ddbb19521f0109f38579891d197b3f4cc103091 Mon Sep 17 00:00:00 2001
+From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
+Date: Mon, 7 Sep 2026 11:11:03 +0200
+Subject: [PATCH 1/4] feat(stack): generate the OKDP component inventory
+
+---
+ package-lock.json            |   19 +-
+ package.json                 |    3 +-
+ scripts/build-stack.mjs      |  419 +++++++++++++
+ scripts/stack-metadata.yaml  |  129 ++++
+ src/data/stack/okdp-1-0.yaml | 1093 ++++++++++++++++++++++++++++++++++
+ 5 files changed, 1661 insertions(+), 2 deletions(-)
+ create mode 100644 scripts/build-stack.mjs
+ create mode 100644 scripts/stack-metadata.yaml
+ create mode 100644 src/data/stack/okdp-1-0.yaml
+
+diff --git a/package-lock.json b/package-lock.json
+index c4c5778..f809c6f 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -17,7 +17,8 @@
+       "devDependencies": {
+         "prettier": "3.9.6",
+         "prettier-plugin-astro": "0.14.1",
+-        "prettier-plugin-tailwindcss": "^0.8.1"
++        "prettier-plugin-tailwindcss": "^0.8.1",
++        "yaml": "^2.9.0"
+       }
+     },
+     "node_modules/@astrojs/compiler": {
+@@ -7587,6 +7588,22 @@
+       "integrity": "sha512-147y/6YNh+tlp6nd/2pWq38i9h6mz/EuQ6njIrmW8D1BS5nCqs0P6DG+m6zTGnNz5I+uhZ0SHxBs9BsPrwcKDA==",
+       "license": "MIT"
+     },
++    "node_modules/yaml": {
++      "version": "2.9.0",
++      "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz",
++      "integrity": "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==",
++      "devOptional": true,
++      "license": "ISC",
++      "bin": {
++        "yaml": "bin.mjs"
++      },
++      "engines": {
++        "node": ">= 14.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/eemeli"
++      }
++    },
+     "node_modules/yargs-parser": {
+       "version": "22.0.0",
+       "resolved": "https://registry.npmjs.org/yargs-parser/-/yargs-parser-22.0.0.tgz",
+diff --git a/package.json b/package.json
+index 8655a76..9fe178f 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,7 @@
+   "devDependencies": {
+     "prettier": "3.9.6",
+     "prettier-plugin-astro": "0.14.1",
+-    "prettier-plugin-tailwindcss": "^0.8.1"
++    "prettier-plugin-tailwindcss": "^0.8.1",
++    "yaml": "^2.9.0"
+   }
+ }
+diff --git a/scripts/build-stack.mjs b/scripts/build-stack.mjs
+new file mode 100644
+index 0000000..8010c52
+--- /dev/null
++++ b/scripts/build-stack.mjs
+@@ -0,0 +1,419 @@
++//
++// Copyright 2026 The OKDP Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++//  Unless required by applicable law or agreed to in writing, software
++//  distributed under the License is distributed on an "AS IS" BASIS,
++//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++//  See the License for the specific language governing permissions and
++//  limitations under the License.
++//
++
++/**
++ * Builds the OKDP stack inventory consumed by /stack/<version>.
++ *
++ * Reads the KubOCD Package manifests from the two package repositories and
++ * flattens them into a single data file. Presentation metadata that cannot be
++ * derived (display names, project URLs, logos) lives in stack-metadata.yaml.
++ *
++ * This runs when a release is cut, not during `astro build`. Its output is
++ * committed, so the site build stays offline and every version change shows up
++ * as a reviewable diff.
++ *
++ *   node scripts/build-stack.mjs --stack 1.0
++ *   node scripts/build-stack.mjs --stack 1.0 --clone
++ *   node scripts/build-stack.mjs --stack 1.0 --repo platform-packages=../platform-packages
++ */
++
++import { execFileSync } from "node:child_process";
++import {
++  mkdirSync,
++  mkdtempSync,
++  readFileSync,
++  readdirSync,
++  writeFileSync,
++  statSync,
++} from "node:fs";
++import { dirname, join, relative, resolve } from "node:path";
++import { tmpdir } from "node:os";
++import { fileURLToPath } from "node:url";
++import { parse, stringify } from "yaml";
++
++const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
++
++const REPOS = {
++  "platform-packages": {
++    url: "https://github.com/OKDP/platform-packages.git",
++    registry: "quay.io/okdp/platform-packages",
++    sections: { services: "data-services", system: "control-plane" },
++  },
++  "sandbox-dependencies": {
++    url: "https://github.com/OKDP/sandbox-dependencies.git",
++    registry: "quay.io/okdp/sandbox-dependencies",
++    sections: { services: "dependencies", system: "dependencies" },
++  },
++};
++
++const OKDP_CHART_PREFIXES = ["quay.io/okdp/charts/"];
++const OKDP_IMAGE_PREFIXES = ["quay.io/okdp/", "okdp/"];
++
++// ---------------------------------------------------------------- arguments
++
++function parseArgs(argv) {
++  const args = { stack: null, clone: false, repos: {}, out: null };
++  for (let i = 0; i < argv.length; i++) {
++    const arg = argv[i];
++    if (arg === "--stack") args.stack = argv[++i];
++    else if (arg === "--out") args.out = argv[++i];
++    else if (arg === "--clone") args.clone = true;
++    else if (arg === "--repo") {
++      const [name, path] = argv[++i].split("=");
++      if (!REPOS[name]) fail(`unknown repo '${name}'`);
++      args.repos[name] = resolve(path);
++    } else fail(`unknown argument '${arg}'`);
++  }
++  if (!args.stack) fail("--stack <version> is required");
++  return args;
++}
++
++function fail(message) {
++  console.error(`build-stack: ${message}`);
++  process.exit(1);
++}
++
++// ------------------------------------------------------------------ sources
++
++/** Resolves each package repo to a local checkout, cloning when asked to. */
++function resolveSources({ clone, repos }) {
++  const sources = {};
++  for (const [name, repo] of Object.entries(REPOS)) {
++    if (repos[name]) {
++      sources[name] = repos[name];
++    } else if (clone) {
++      const dir = join(mkdtempSync(join(tmpdir(), "okdp-stack-")), name);
++      console.error(`  cloning ${name}…`);
++      execFileSync("git", ["clone", "--depth", "1", "--quiet", repo.url, dir]);
++      sources[name] = dir;
++    } else {
++      const sibling = resolve(ROOT, "..", name);
++      if (!exists(sibling)) {
++        fail(
++          `no checkout for '${name}'. Pass --clone, or --repo ${name}=<path>`,
++        );
++      }
++      sources[name] = sibling;
++    }
++    const head = execFileSync("git", ["-C", sources[name], "rev-parse", "HEAD"])
++      .toString()
++      .trim();
++    console.error(`  ${name} @ ${head.slice(0, 7)}  (${sources[name]})`);
++    sources[name] = { path: sources[name], head };
++  }
++  return sources;
++}
++
++function exists(path) {
++  try {
++    statSync(path);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++function walk(dir) {
++  const found = [];
++  for (const entry of readdirSync(dir, { withFileTypes: true })) {
++    const path = join(dir, entry.name);
++    if (entry.isDirectory()) found.push(...walk(path));
++    else if (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml"))
++      found.push(path);
++  }
++  return found;
++}
++
++// --------------------------------------------------------------- extraction
++
++/**
++ * Pulls chart and image coordinates out of one module. A module's `values` is
++ * a Go template rather than YAML, so images are matched textually.
++ */
++function readModule(module) {
++  const source = module.source ?? {};
++  const entry = { name: module.name, charts: [], images: [] };
++
++  if (source.helmRepository) {
++    const { url, chart, version } = source.helmRepository;
++    entry.charts.push({
++      name: chart,
++      version: String(version),
++      repository: url,
++      origin: "upstream",
++    });
++  }
++  if (source.oci) {
++    const { repository, tag } = source.oci;
++    entry.charts.push({
++      name: repository.split("/").pop(),
++      version: String(tag),
++      repository,
++      origin: isOkdpChart(repository) ? "okdp" : "upstream",
++    });
++  }
++  if (source.local) {
++    // Plumbing charts vendored in the package repo (secret generation, OIDC
++    // client registration). Never the component itself.
++    entry.charts.push({
++      name: module.name,
++      version: null,
++      repository: null,
++      origin: "local",
++    });
++  }
++
++  const values = typeof module.values === "string" ? module.values : "";
++  for (const [, repository, tag] of values.matchAll(
++    /repository:\s*"?([\w./-]+)"?\s*\n\s*tag:\s*"?([\w.-]+)"?/g,
++  )) {
++    entry.images.push({ repository, tag: String(tag) });
++  }
++  for (const [, ref] of values.matchAll(
++    /image:\s*"?([\w./-]+:[\w.-]+)"?\s*$/gm,
++  )) {
++    const index = ref.lastIndexOf(":");
++    entry.images.push({
++      repository: ref.slice(0, index),
++      tag: ref.slice(index + 1),
++    });
++  }
++
++  // A chart published as OCI also matches the repository/tag pattern above.
++  const chartRefs = new Set(entry.charts.map((chart) => chart.repository));
++  entry.images = dedupe(
++    entry.images.filter((image) => !chartRefs.has(image.repository)),
++    (image) => `${image.repository}:${image.tag}`,
++  );
++  entry.charts = dedupe(
++    entry.charts,
++    (chart) => `${chart.repository}:${chart.version}`,
++  );
++  return entry;
++}
++
++function dedupe(items, key) {
++  const seen = new Map();
++  for (const item of items) if (!seen.has(key(item))) seen.set(key(item), item);
++  return [...seen.values()];
++}
++
++const isOkdpChart = (ref) =>
++  OKDP_CHART_PREFIXES.some((prefix) => ref.startsWith(prefix));
++const isOkdpImage = (ref) =>
++  OKDP_IMAGE_PREFIXES.some((prefix) => ref.startsWith(prefix));
++
++const basename = (ref) => (ref ?? "").split("/").pop();
++
++/**
++ * Picks the chart and image that *are* the component, as opposed to the helper
++ * modules packaged alongside it. Without this, Airflow reports `oidc-dcr` and
++ * Trino reports `internal-secrets` — both plumbing.
++ */
++function selectPrimary(pkg, modules, meta) {
++  const charts = modules.flatMap((module) => module.charts);
++  const images = modules.flatMap((module) => module.images);
++  const named = (name) => (candidate) => {
++    const a = basename(candidate.repository) ?? candidate.name;
++    return a === name || candidate.name === name;
++  };
++
++  const chart =
++    (meta.primaryChart && charts.find((c) => c.name === meta.primaryChart)) ??
++    charts.find(named(pkg.name)) ??
++    charts.find((c) => c.origin === "upstream" && c.version) ??
++    charts.find((c) => c.origin === "okdp" && c.version) ??
++    null;
++
++  const image =
++    images.find(named(pkg.name)) ??
++    images.find((i) => isOkdpImage(i.repository)) ??
++    images.find((i) => !isOkdpChart(i.repository)) ??
++    null;
++
++  return { chart, image };
++}
++
++/**
++ * upstream-chart | okdp-chart | okdp-image, as displayed in the Provenance
++ * column. Derived from the primary chart and image only: every package vendors
++ * a local secrets helper, so counting those would tag all 27 as OKDP-authored.
++ */
++function provenanceOf(primary) {
++  const tags = [];
++  if (primary.chart?.origin === "upstream") tags.push("upstream-chart");
++  if (primary.chart?.origin === "okdp") tags.push("okdp-chart");
++  if (primary.image && isOkdpImage(primary.image.repository))
++    tags.push("okdp-image");
++  return tags.length ? tags : ["okdp-chart"];
++}
++
++/**
++ * The version a reader cares about — "Trino 480", not the package tag.
++ *
++ * Package tags are usually `<upstream>-pNN`, but not always: trino carries a
++ * SemVer-shaped tag the console's parser requires, and keycloak's tag tracks
++ * the Bitnami chart rather than Keycloak itself. Those are named explicitly in
++ * stack-metadata.yaml; everything else is derived and cross-checked.
++ */
++function upstreamVersionOf(pkg, primary, override) {
++  const derived = pkg.tag.replace(/-p\d+$/, "");
++  if (override)
++    return { version: String(override), source: "metadata override", derived };
++
++  // An image named after the package states the version most directly.
++  if (primary.image && basename(primary.image.repository) === pkg.name) {
++    return {
++      version: primary.image.tag,
++      source: `image ${primary.image.repository}`,
++      derived,
++    };
++  }
++  return { version: derived, source: "package tag", derived };
++}
++
++// ------------------------------------------------------------------ collect
++
++function collect(sources, metadata) {
++  const components = [];
++  const warnings = [];
++
++  for (const [repoName, repo] of Object.entries(REPOS)) {
++    const root = join(sources[repoName].path, "packages");
++    for (const file of walk(root).sort()) {
++      const raw = readFileSync(file, "utf8");
++      let pkg;
++      try {
++        pkg = parse(raw);
++      } catch (error) {
++        warnings.push(
++          `${relative(root, file)}: unparseable (${error.message})`,
++        );
++        continue;
++      }
++      if (!pkg?.name || !pkg?.tag) continue;
++
++      const group = relative(root, file).split("/")[0];
++      const section = repo.sections[group];
++      if (!section) {
++        warnings.push(`${pkg.name}: unmapped group '${group}'`);
++        continue;
++      }
++
++      const meta = metadata.components?.[pkg.name] ?? {};
++      const modules = (pkg.modules ?? []).map(readModule);
++      const primary = selectPrimary(pkg, modules, meta);
++      const upstream = upstreamVersionOf(pkg, primary, meta.upstreamVersion);
++
++      if (!meta.upstreamVersion && upstream.version !== upstream.derived) {
++        warnings.push(
++          `${pkg.name}: derived upstream ${upstream.version} from ${upstream.source}, ` +
++            `package tag suggests ${upstream.derived}`,
++        );
++      }
++      if (!metadata.components?.[pkg.name]) {
++        warnings.push(
++          `${pkg.name}: no entry in stack-metadata.yaml (using defaults)`,
++        );
++      }
++
++      components.push({
++        id: pkg.name,
++        name: meta.name ?? pkg.name,
++        section,
++        upstreamVersion: upstream.version,
++        upstreamVersionSource: upstream.source,
++        package: {
++          repository: `${repo.registry}/${pkg.name}`,
++          tag: String(pkg.tag),
++        },
++        provenance: provenanceOf(primary),
++        protected: pkg.protected === true,
++        description: meta.description ?? firstSentence(pkg.description),
++        primaryChart: primary.chart,
++        primaryImage: primary.image,
++        charts: modules.flatMap((module) => module.charts),
++        images: modules.flatMap((module) => module.images),
++        modules: modules.filter(
++          (module) => module.charts.length || module.images.length,
++        ),
++        links: {
++          upstream: meta.upstream ?? null,
++          source: `https://github.com/OKDP/${repoName}/blob/main/${relative(sources[repoName].path, file)}`,
++        },
++        logo: meta.logo ?? null,
++      });
++    }
++  }
++
++  components.sort((a, b) => a.name.localeCompare(b.name));
++  return { components, warnings };
++}
++
++function firstSentence(text) {
++  if (typeof text !== "string") return null;
++  const line = text.trim().split("\n")[0].trim();
++  return line.replace(/^[\w\s]+ - /, "") || null;
++}
++
++// -------------------------------------------------------------------- write
++
++const args = parseArgs(process.argv.slice(2));
++const metadataPath = join(ROOT, "scripts", "stack-metadata.yaml");
++const metadata = exists(metadataPath)
++  ? parse(readFileSync(metadataPath, "utf8"))
++  : {};
++
++console.error(`build-stack: OKDP ${args.stack}`);
++const sources = resolveSources(args);
++const { components, warnings } = collect(sources, metadata);
++
++const output = {
++  stack: args.stack,
++  generated: {
++    by: "scripts/build-stack.mjs",
++    note: "Generated file. Re-run the script instead of editing by hand.",
++    sources: Object.fromEntries(
++      Object.entries(sources).map(([name, source]) => [name, source.head]),
++    ),
++  },
++  components,
++};
++
++const outPath = args.out
++  ? resolve(args.out)
++  : join(
++      ROOT,
++      "src",
++      "data",
++      "stack",
++      `okdp-${args.stack.replace(/\./g, "-")}.yaml`,
++    );
++mkdirSync(dirname(outPath), { recursive: true });
++writeFileSync(outPath, stringify(output, { lineWidth: 0 }));
++
++const counts = components.reduce((acc, component) => {
++  acc[component.section] = (acc[component.section] ?? 0) + 1;
++  return acc;
++}, {});
++console.error(
++  `  ${components.length} components  ` +
++    Object.entries(counts)
++      .map(([section, count]) => `${section}=${count}`)
++      .join(" "),
++);
++for (const warning of warnings) console.error(`  warn: ${warning}`);
++console.error(`  wrote ${relative(ROOT, outPath)}`);
+diff --git a/scripts/stack-metadata.yaml b/scripts/stack-metadata.yaml
+new file mode 100644
+index 0000000..ab43e24
+--- /dev/null
++++ b/scripts/stack-metadata.yaml
+@@ -0,0 +1,129 @@
++#
++# Copyright 2026 The OKDP Authors.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++#  Unless required by applicable law or agreed to in writing, software
++#  distributed under the License is distributed on an "AS IS" BASIS,
++#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#  See the License for the specific language governing permissions and
++#  limitations under the License.
++#
++
++# Presentation metadata for the stack inventory. Everything here is curated by
++# hand because it cannot be derived from the Package manifests: display names,
++# project homepages, logos.
++#
++# `upstreamVersion` is an escape hatch, used only where the package tag does not
++# carry the version a reader expects. Each one needs a comment saying why.
++# build-stack.mjs warns when a package has no entry here.
++
++components:
++  # ------------------------------------------------------------ data services
++  airflow:
++    name: Apache Airflow
++    upstream: https://airflow.apache.org
++    logo: airflow.svg
++  hive-metastore:
++    name: Hive Metastore
++    upstream: https://hive.apache.org
++  jupyterhub:
++    name: JupyterHub
++    upstream: https://jupyter.org
++    logo: jupyter.svg
++  okdp-examples:
++    name: OKDP Examples
++    upstream: https://github.com/OKDP/okdp-examples
++    description: Reference notebooks, datasets and OPA policies used by the sandbox.
++  polaris:
++    name: Apache Polaris
++    upstream: https://polaris.apache.org
++    logo: polaris.svg
++  spark-defaults:
++    name: Spark Defaults
++    description: Shared Spark configuration applied to every Spark application.
++  spark-history-server:
++    name: Spark History Server
++    upstream: https://spark.apache.org
++    logo: spark.svg
++  spark-operator:
++    name: Spark Operator
++    upstream: https://github.com/kubeflow/spark-operator
++    logo: spark.svg
++  spark-rbac:
++    name: Spark RBAC
++    logo: spark.svg
++    description: Namespace roles and bindings letting Spark applications run in a project.
++  superset:
++    name: Apache Superset
++    upstream: https://superset.apache.org
++    logo: superset.svg
++  trino:
++    name: Trino
++    upstream: https://trino.io
++    logo: trino.svg
++    # The package tag is SemVer-shaped (480.0.0-pNN) because the console's
++    # version parser requires it. Trino itself versions as a plain integer.
++    upstreamVersion: "480"
++
++  # ------------------------------------------------------------ control plane
++  okdp-control-plane-server:
++    name: OKDP Control Plane Server
++    upstream: https://github.com/OKDP/okdp-control-plane-server
++  okdp-control-plane-ui:
++    name: OKDP Control Plane Console
++    upstream: https://github.com/OKDP/okdp-control-plane-ui
++
++  # -------------------------------------------------------------- dependencies
++  cert-manager:
++    name: cert-manager
++    upstream: https://cert-manager.io
++  cloudnative-pg:
++    name: CloudNativePG
++    upstream: https://cloudnative-pg.io
++  cnpg-postgresql:
++    name: PostgreSQL
++    upstream: https://www.postgresql.org
++    description: PostgreSQL clusters provisioned through CloudNativePG.
++  coredns-patch:
++    name: CoreDNS patch
++    upstream: https://coredns.io
++    description: Rewrites cluster DNS so platform hostnames resolve inside the sandbox.
++  dns-server:
++    name: DNS server
++    description: dnsmasq resolver serving the sandbox ingress suffix.
++  external-secrets:
++    name: External Secrets Operator
++    upstream: https://external-secrets.io
++  ingress-nginx:
++    name: Ingress NGINX
++    upstream: https://github.com/kubernetes/ingress-nginx
++  keycloak:
++    name: Keycloak
++    upstream: https://www.keycloak.org
++    # The package tag tracks the Bitnami chart (24.4.11), not Keycloak. The
++    # version users care about is the one in the image OKDP rebuilds.
++    upstreamVersion: 26.1.3
++  kubauth:
++    name: kubauth
++    description: OIDC authentication for kubectl against the platform identity provider.
++  kubocd-webhooks:
++    name: KubOCD webhooks
++    description: Admission webhooks backing the KubOCD Release and Context resources.
++  local-secrets-provider:
++    name: Local secrets provider
++    description: Generates sandbox credentials in-cluster, standing in for a real vault.
++  seaweedfs:
++    name: SeaweedFS
++    upstream: https://github.com/seaweedfs/seaweedfs
++    description: S3-compatible object store backing the lakehouse in the sandbox.
++  tools:
++    name: Platform tools
++    description: Reloader, kubernetes-replicator and secret-generator, bundled as one package.
++  vault:
++    name: HashiCorp Vault
++    upstream: https://www.vaultproject.io
+diff --git a/src/data/stack/okdp-1-0.yaml b/src/data/stack/okdp-1-0.yaml
+new file mode 100644
+index 0000000..d20a8a2
+--- /dev/null
++++ b/src/data/stack/okdp-1-0.yaml
+@@ -0,0 +1,1093 @@
++stack: "1.0"
++generated:
++  by: scripts/build-stack.mjs
++  note: Generated file. Re-run the script instead of editing by hand.
++  sources:
++    platform-packages: 082e702722bcc395a2930bbd46f732c4486041c4
++    sandbox-dependencies: 12bb63ac6d11b8b17bb3a4f8bbe4f04e2e477063
++components:
++  - id: airflow
++    name: Apache Airflow
++    section: data-services
++    upstreamVersion: 3.2.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/airflow
++      tag: 3.2.1-p07
++    provenance:
++      - upstream-chart
++    protected: false
++    description: Apache Airflow 3.2.1 - Workflow orchestration platform with Spark Operator integration
++    primaryChart: &a1
++      name: airflow
++      version: 1.21.0
++      repository: https://airflow.apache.org
++      origin: upstream
++    primaryImage: null
++    charts:
++      - &a2
++        name: oidc-dcr
++        version: 0.3.2
++        repository: quay.io/adaltas/oidc-dcr
++        origin: upstream
++      - &a3
++        name: internal-secrets
++        version: null
++        repository: null
++        origin: local
++      - *a1
++    images: []
++    modules:
++      - name: oidc-dcr
++        charts:
++          - *a2
++        images: []
++      - name: internal-secrets
++        charts:
++          - *a3
++        images: []
++      - name: main
++        charts:
++          - *a1
++        images: []
++    links:
++      upstream: https://airflow.apache.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/airflow/airflow.yaml
++    logo: airflow.svg
++  - id: polaris
++    name: Apache Polaris
++    section: data-services
++    upstreamVersion: 1.3.0-incubating
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/polaris
++      tag: 1.3.0-incubating-p07
++    provenance:
++      - upstream-chart
++      - okdp-image
++    protected: false
++    description: Apache Polaris is an open-source, fully-featured catalog for Apache Iceberg™.
++    primaryChart: &a4
++      name: polaris
++      version: 1.3.0-incubating
++      repository: https://downloads.apache.org/incubator/polaris/helm-chart/
++      origin: upstream
++    primaryImage: &a5
++      repository: quay.io/okdp/polaris-console
++      tag: v0.1.1
++    charts:
++      - &a6
++        name: polaris-admin
++        version: 1.0.0
++        repository: quay.io/okdp/charts/polaris-admin
++        origin: okdp
++      - *a4
++      - &a8
++        name: polaris-admin
++        version: 1.0.0
++        repository: quay.io/okdp/charts/polaris-admin
++        origin: okdp
++      - &a10
++        name: polaris-console
++        version: 0.1.0
++        repository: quay.io/okdp/charts/polaris-console
++        origin: okdp
++    images:
++      - &a7
++        repository: apache/polaris-admin-tool
++        tag: 1.3.0-incubating
++      - &a9
++        repository: curlimages/curl
++        tag: 8.18.0
++      - *a5
++    modules:
++      - name: bootstrap
++        charts:
++          - *a6
++        images:
++          - *a7
++      - name: main
++        charts:
++          - *a4
++        images: []
++      - name: principals
++        charts:
++          - *a8
++        images:
++          - *a9
++      - name: console
++        charts:
++          - *a10
++        images:
++          - *a5
++    links:
++      upstream: https://polaris.apache.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/polaris/polaris.yaml
++    logo: polaris.svg
++  - id: superset
++    name: Apache Superset
++    section: data-services
++    upstreamVersion: 6.0.0
++    upstreamVersionSource: image quay.io/okdp/superset
++    package:
++      repository: quay.io/okdp/platform-packages/superset
++      tag: 6.0.0-p05
++    provenance:
++      - okdp-chart
++      - okdp-image
++    protected: false
++    description: Enterprise business intelligence platform for modern data teams.
++    primaryChart: &a11
++      name: superset
++      version: 0.15.2-2.0
++      repository: quay.io/okdp/charts/superset
++      origin: okdp
++    primaryImage: &a12
++      repository: quay.io/okdp/superset
++      tag: 6.0.0
++    charts:
++      - &a13
++        name: internal-secrets
++        version: null
++        repository: null
++        origin: local
++      - *a11
++    images:
++      - *a12
++      - &a14
++        repository: quay.io/okdp/superset
++        tag: 6.0.0-dockerize
++      - &a15
++        repository: quay.io/okdp/superset
++        tag: 6.0.0-websocket
++      - &a16
++        repository: postgres
++        tag: 16-alpine
++    modules:
++      - name: internal-secrets
++        charts:
++          - *a13
++        images: []
++      - name: main
++        charts:
++          - *a11
++        images:
++          - *a12
++          - *a14
++          - *a15
++          - *a16
++    links:
++      upstream: https://superset.apache.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/superset/superset.yaml
++    logo: superset.svg
++  - id: cert-manager
++    name: cert-manager
++    section: dependencies
++    upstreamVersion: 1.17.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/cert-manager
++      tag: 1.17.1-p08
++    provenance:
++      - upstream-chart
++    protected: true
++    description: null
++    primaryChart: &a17
++      name: cert-manager
++      version: v1.17.1
++      repository: https://charts.jetstack.io
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a17
++      - &a18
++        name: trust-manager
++        version: v0.16.0
++        repository: https://charts.jetstack.io
++        origin: upstream
++      - &a19
++        name: cert-issuers
++        version: 0.2.0
++        repository: quay.io/okdp/charts/cert-issuers
++        origin: okdp
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a17
++        images: []
++      - name: trust
++        charts:
++          - *a18
++        images: []
++      - name: issuers
++        charts:
++          - *a19
++        images: []
++    links:
++      upstream: https://cert-manager.io
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/cert-manager/cert-manager.yaml
++    logo: null
++  - id: cloudnative-pg
++    name: CloudNativePG
++    section: dependencies
++    upstreamVersion: 1.29.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/cloudnative-pg
++      tag: 1.29.1-p01
++    provenance:
++      - upstream-chart
++    protected: false
++    description: CloudNativePG is the Kubernetes operator that covers the full lifecycle of a highly available PostgreSQL database cluster
++    primaryChart: &a20
++      name: cloudnative-pg
++      version: 0.28.0
++      repository: https://cloudnative-pg.github.io/charts/
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a20
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a20
++        images: []
++    links:
++      upstream: https://cloudnative-pg.io
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/cloudnative-pg/cloudnative-pg.yaml
++    logo: null
++  - id: coredns-patch
++    name: CoreDNS patch
++    section: dependencies
++    upstreamVersion: 1.0.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/coredns-patch
++      tag: 1.0.0-p05
++    provenance:
++      - okdp-chart
++      - okdp-image
++    protected: false
++    description: Rewrites cluster DNS so platform hostnames resolve inside the sandbox.
++    primaryChart: &a21
++      name: coredns-patch
++      version: 0.1.0
++      repository: quay.io/okdp/charts/coredns-patch
++      origin: okdp
++    primaryImage: &a22
++      repository: quay.io/okdp/sandbox-images/kubectl
++      tag: latest
++    charts:
++      - *a21
++    images:
++      - *a22
++    modules:
++      - name: main
++        charts:
++          - *a21
++        images:
++          - *a22
++    links:
++      upstream: https://coredns.io
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/coredns-patch/coredns-patch.yaml
++    logo: null
++  - id: dns-server
++    name: DNS server
++    section: dependencies
++    upstreamVersion: 1.0.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/dns-server
++      tag: 1.0.0-p04
++    provenance:
++      - okdp-chart
++    protected: false
++    description: dnsmasq resolver serving the sandbox ingress suffix.
++    primaryChart: &a23
++      name: dns-server
++      version: 1.0.0
++      repository: quay.io/okdp/charts/dns-server
++      origin: okdp
++    primaryImage: &a24
++      repository: 4km3/dnsmasq
++      tag: 2.90-r3
++    charts:
++      - *a23
++    images:
++      - *a24
++    modules:
++      - name: main
++        charts:
++          - *a23
++        images:
++          - *a24
++    links:
++      upstream: null
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/dns-server/dns-server.yaml
++    logo: null
++  - id: external-secrets
++    name: External Secrets Operator
++    section: dependencies
++    upstreamVersion: 0.15.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/external-secrets
++      tag: 0.15.1-p03
++    provenance:
++      - upstream-chart
++    protected: true
++    description: External Secrets Operator synchronizes secrets from external APIs (HashiCorp Vault, AWS Secrets
++    primaryChart: &a25
++      name: external-secrets
++      version: 0.15.1
++      repository: https://charts.external-secrets.io
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a25
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a25
++        images: []
++    links:
++      upstream: https://external-secrets.io
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/external-secrets/external-secrets.yaml
++    logo: null
++  - id: vault
++    name: HashiCorp Vault
++    section: dependencies
++    upstreamVersion: 0.29.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/vault
++      tag: 0.29.1-p03
++    provenance:
++      - upstream-chart
++    protected: true
++    description: HashiCorp Vault, the secret backend a SecretStore points at. Runs in dev mode by default,
++    primaryChart: &a26
++      name: vault
++      version: 0.29.1
++      repository: https://helm.releases.hashicorp.com
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a26
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a26
++        images: []
++    links:
++      upstream: https://www.vaultproject.io
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/vault/vault.yaml
++    logo: null
++  - id: hive-metastore
++    name: Hive Metastore
++    section: data-services
++    upstreamVersion: 4.0.1
++    upstreamVersionSource: image quay.io/okdp/hive-metastore
++    package:
++      repository: quay.io/okdp/platform-packages/hive-metastore
++      tag: 4.0.1-p02
++    provenance:
++      - okdp-chart
++      - okdp-image
++    protected: false
++    description: Hive Metastore is a centralized metadata repository for data lakes and big data analytics.
++    primaryChart: &a27
++      name: hive-metastore
++      version: 1.4.0
++      repository: quay.io/okdp/charts/hive-metastore
++      origin: okdp
++    primaryImage: &a28
++      repository: quay.io/okdp/hive-metastore
++      tag: 4.0.1
++    charts:
++      - *a27
++    images:
++      - *a28
++    modules:
++      - name: main
++        charts:
++          - *a27
++        images:
++          - *a28
++    links:
++      upstream: https://hive.apache.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/hive-metastore/hive-metastore.yaml
++    logo: null
++  - id: ingress-nginx
++    name: Ingress NGINX
++    section: dependencies
++    upstreamVersion: 4.12.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/ingress-nginx
++      tag: 4.12.1-p03
++    provenance:
++      - upstream-chart
++    protected: false
++    description: NGINX Ingress Controller for Kubernetes with support for multiple deployment modes
++    primaryChart: &a29
++      name: ingress-nginx
++      version: 4.12.1
++      repository: https://kubernetes.github.io/ingress-nginx
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a29
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a29
++        images: []
++    links:
++      upstream: https://github.com/kubernetes/ingress-nginx
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/ingress-nginx/ingress-nginx.yaml
++    logo: null
++  - id: jupyterhub
++    name: JupyterHub
++    section: data-services
++    upstreamVersion: 4.3.3
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/jupyterhub
++      tag: 4.3.3-p06
++    provenance:
++      - upstream-chart
++      - okdp-image
++    protected: false
++    description: Multi-user interactive development environment for data science and machine learning.
++    primaryChart: &a30
++      name: jupyterhub
++      version: 4.3.3
++      repository: https://hub.jupyter.org/helm-chart/
++      origin: upstream
++    primaryImage: &a31
++      repository: quay.io/okdp/jupyter/minimal-notebook
++      tag: python-3.12.12-hub-5.4.2-lab-4.5.0
++    charts:
++      - &a32
++        name: oidc-client
++        version: null
++        repository: null
++        origin: local
++      - &a33
++        name: spark-rbac
++        version: 1.0.1
++        repository: quay.io/okdp/charts/spark-rbac
++        origin: okdp
++      - *a30
++    images:
++      - *a31
++      - &a34
++        repository: quay.io/okdp/jupyter/scipy-notebook
++        tag: python-3.12.12-hub-5.4.2-lab-4.5.0
++      - &a35
++        repository: quay.io/okdp/jupyter/datascience-notebook
++        tag: python-3.12.12-hub-5.4.2-lab-4.5.0
++      - &a36
++        repository: quay.io/okdp/jupyter/all-spark-notebook
++        tag: spark-3.4.4-python-3.11-java-17-scala-2.12
++      - &a37
++        repository: quay.io/okdp/jupyter/all-spark-notebook
++        tag: spark-3.5.6-python-3.11-java-17-scala-2.12
++    modules:
++      - name: oidc-client
++        charts:
++          - *a32
++        images: []
++      - name: spark-rbac
++        charts:
++          - *a33
++        images: []
++      - name: main
++        charts:
++          - *a30
++        images:
++          - *a31
++          - *a34
++          - *a35
++          - *a36
++          - *a37
++    links:
++      upstream: https://jupyter.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/jupyterhub/jupyterhub.yaml
++    logo: jupyter.svg
++  - id: keycloak
++    name: Keycloak
++    section: dependencies
++    upstreamVersion: 26.1.3
++    upstreamVersionSource: metadata override
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/keycloak
++      tag: 24.4.11-p16
++    provenance:
++      - upstream-chart
++      - okdp-image
++    protected: false
++    description: Keycloak identity and access management for Kubernetes
++    primaryChart: &a38
++      name: keycloak
++      version: 24.4.11
++      repository: registry-1.docker.io/bitnamicharts/keycloak
++      origin: upstream
++    primaryImage: &a39
++      repository: okdp/sandbox-images/keycloak
++      tag: 26.1.3-debian-12-r0
++    charts:
++      - *a38
++    images:
++      - *a39
++      - &a40
++        repository: okdp/sandbox-images/keycloak-config-cli
++        tag: 6.4.0-debian-12-r0
++    modules:
++      - name: main
++        charts:
++          - *a38
++        images:
++          - *a39
++          - *a40
++    links:
++      upstream: https://www.keycloak.org
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/keycloak/keycloak.yaml
++    logo: null
++  - id: kubauth
++    name: kubauth
++    section: dependencies
++    upstreamVersion: 0.3.0-snapshot
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/kubauth
++      tag: 0.3.0-snapshot-p03
++    provenance:
++      - upstream-chart
++    protected: false
++    description: OIDC authentication for kubectl against the platform identity provider.
++    primaryChart: &a41
++      name: kubauth
++      version: 0.3.0-snapshot
++      repository: quay.io/kubauth/charts/kubauth
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a41
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a41
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/kubauth/kubauth.yaml
++    logo: null
++  - id: kubocd-webhooks
++    name: KubOCD webhooks
++    section: dependencies
++    upstreamVersion: v0.3.2
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/kubocd-webhooks
++      tag: v0.3.2-p01
++    provenance:
++      - upstream-chart
++    protected: true
++    description: Admission webhooks backing the KubOCD Release and Context resources.
++    primaryChart: &a42
++      name: kubocd-wh
++      version: v0.3.2
++      repository: quay.io/kubocd/charts/kubocd-wh
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a42
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a42
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/kubocd-webhooks/webhooks.yaml
++    logo: null
++  - id: local-secrets-provider
++    name: Local secrets provider
++    section: dependencies
++    upstreamVersion: 1.0.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/local-secrets-provider
++      tag: 1.0.0-p06
++    provenance:
++      - okdp-chart
++    protected: false
++    description: Generates sandbox credentials in-cluster, standing in for a real vault.
++    primaryChart: &a43
++      name: local-secrets-provider
++      version: 0.1.0
++      repository: quay.io/okdp/charts/local-secrets-provider
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a43
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a43
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/local-secrets-provider/local-secrets-provider.yaml
++    logo: null
++  - id: okdp-control-plane-ui
++    name: OKDP Control Plane Console
++    section: control-plane
++    upstreamVersion: 0.7.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/okdp-control-plane-ui
++      tag: 0.7.0-p01
++    provenance:
++      - okdp-chart
++    protected: false
++    description: Frontend web interface for the Open Kubernetes Data Platform
++    primaryChart: &a44
++      name: okdp-control-plane-ui
++      version: 0.7.0
++      repository: quay.io/okdp/charts/okdp-control-plane-ui
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a44
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a44
++        images: []
++    links:
++      upstream: https://github.com/OKDP/okdp-control-plane-ui
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/system/okdp-control-plane-ui/okdp-control-plane-ui.yaml
++    logo: null
++  - id: okdp-control-plane-server
++    name: OKDP Control Plane Server
++    section: control-plane
++    upstreamVersion: 0.7.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/okdp-control-plane-server
++      tag: 0.7.1-p02
++    provenance:
++      - okdp-chart
++    protected: false
++    description: API backend for the Open Kubernetes Data Platform
++    primaryChart: &a45
++      name: okdp-control-plane-server
++      version: 0.7.1
++      repository: quay.io/okdp/charts/okdp-control-plane-server
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a45
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a45
++        images: []
++    links:
++      upstream: https://github.com/OKDP/okdp-control-plane-server
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/system/okdp-control-plane-server/okdp-control-plane-server.yaml
++    logo: null
++  - id: okdp-examples
++    name: OKDP Examples
++    section: data-services
++    upstreamVersion: 1.2.0
++    upstreamVersionSource: image quay.io/okdp/okdp-examples
++    package:
++      repository: quay.io/okdp/platform-packages/okdp-examples
++      tag: 1.3.0-p08
++    provenance:
++      - okdp-chart
++      - okdp-image
++    protected: false
++    description: Reference notebooks, datasets and OPA policies used by the sandbox.
++    primaryChart: &a46
++      name: okdp-examples
++      version: 1.3.0
++      repository: quay.io/okdp/charts/okdp-examples
++      origin: okdp
++    primaryImage: &a47
++      repository: quay.io/okdp/okdp-examples
++      tag: 1.2.0
++    charts:
++      - *a46
++    images:
++      - *a47
++    modules:
++      - name: main
++        charts:
++          - *a46
++        images:
++          - *a47
++    links:
++      upstream: https://github.com/OKDP/okdp-examples
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/okdp-examples/okdp-examples.yaml
++    logo: null
++  - id: tools
++    name: Platform tools
++    section: dependencies
++    upstreamVersion: 1.0.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/tools
++      tag: 1.0.0-p01
++    provenance:
++      - upstream-chart
++    protected: false
++    description: Reloader, kubernetes-replicator and secret-generator, bundled as one package.
++    primaryChart: &a48
++      name: reloader
++      version: 1.0.72
++      repository: https://stakater.github.io/stakater-charts
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a48
++      - &a49
++        name: kubernetes-replicator
++        version: 2.9.2
++        repository: https://helm.mittwald.de
++        origin: upstream
++      - &a50
++        name: kubernetes-secret-generator
++        version: 3.4.0
++        repository: https://helm.mittwald.de
++        origin: upstream
++    images: []
++    modules:
++      - name: reloader
++        charts:
++          - *a48
++        images: []
++      - name: replicator
++        charts:
++          - *a49
++        images: []
++      - name: secret-generator
++        charts:
++          - *a50
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/tools/tools.yaml
++    logo: null
++  - id: cnpg-postgresql
++    name: PostgreSQL
++    section: dependencies
++    upstreamVersion: "18.3"
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/cnpg-postgresql
++      tag: 18.3-p03
++    provenance:
++      - okdp-chart
++    protected: false
++    description: PostgreSQL clusters provisioned through CloudNativePG.
++    primaryChart: &a51
++      name: cnpg-postgresql
++      version: 0.1.0
++      repository: quay.io/okdp/charts/cnpg-postgresql
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a51
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a51
++        images: []
++    links:
++      upstream: https://www.postgresql.org
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/system/cnpg-postgresql/cnpg-postgresql.yaml
++    logo: null
++  - id: seaweedfs
++    name: SeaweedFS
++    section: dependencies
++    upstreamVersion: 4.17.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/sandbox-dependencies/seaweedfs
++      tag: 4.17.0-p08
++    provenance:
++      - upstream-chart
++    protected: false
++    description: S3-compatible object store backing the lakehouse in the sandbox.
++    primaryChart: &a52
++      name: seaweedfs
++      version: 4.17.0
++      repository: https://seaweedfs.github.io/seaweedfs/helm
++      origin: upstream
++    primaryImage: null
++    charts:
++      - &a53
++        name: seaweedfs-auth-config
++        version: 1.1.0
++        repository: quay.io/okdp/charts/seaweedfs-auth-config
++        origin: okdp
++      - *a52
++      - &a54
++        name: seaweedfs-provisioning
++        version: 1.0.0
++        repository: quay.io/okdp/charts/seaweedfs-provisioning
++        origin: okdp
++    images: []
++    modules:
++      - name: auth-config
++        charts:
++          - *a53
++        images: []
++      - name: main
++        charts:
++          - *a52
++        images: []
++      - name: provisioning
++        charts:
++          - *a54
++        images: []
++    links:
++      upstream: https://github.com/seaweedfs/seaweedfs
++      source: https://github.com/OKDP/sandbox-dependencies/blob/main/packages/services/seaweedfs/seaweedfs.yaml
++    logo: null
++  - id: spark-defaults
++    name: Spark Defaults
++    section: data-services
++    upstreamVersion: 1.0.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/spark-defaults
++      tag: 1.0.0-p01
++    provenance:
++      - okdp-chart
++    protected: false
++    description: Shared Spark configuration applied to every Spark application.
++    primaryChart: &a55
++      name: spark-defaults
++      version: 1.0.0
++      repository: quay.io/okdp/charts/spark-defaults
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a55
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a55
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/spark-defaults/spark-defaults.yaml
++    logo: null
++  - id: spark-history-server
++    name: Spark History Server
++    section: data-services
++    upstreamVersion: 3.5.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/spark-history-server
++      tag: 3.5.1-p08
++    provenance:
++      - okdp-chart
++    protected: false
++    description: Monitoring and debugging interface for Apache Spark applications.
++    primaryChart: &a56
++      name: spark-history-server
++      version: 1.0.0
++      repository: quay.io/okdp/charts/spark-history-server
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a56
++      - &a57
++        name: spark-web-proxy
++        version: 0.1.0
++        repository: quay.io/okdp/charts/spark-web-proxy
++        origin: okdp
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a56
++        images: []
++      - name: proxy
++        charts:
++          - *a57
++        images: []
++    links:
++      upstream: https://spark.apache.org
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/spark-history-server/spark-history-server.yaml
++    logo: spark.svg
++  - id: spark-operator
++    name: Spark Operator
++    section: data-services
++    upstreamVersion: 2.4.0
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/spark-operator
++      tag: 2.4.0-p04
++    provenance:
++      - upstream-chart
++    protected: false
++    description: Spark Operator 2.4.0 - Kubernetes operator for managing Apache Spark applications
++    primaryChart: &a58
++      name: spark-operator
++      version: 2.4.0
++      repository: https://kubeflow.github.io/spark-operator
++      origin: upstream
++    primaryImage: null
++    charts:
++      - *a58
++    images: []
++    modules:
++      - name: noname
++        charts:
++          - *a58
++        images: []
++    links:
++      upstream: https://github.com/kubeflow/spark-operator
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/spark-operator/spark-operator.yaml
++    logo: spark.svg
++  - id: spark-rbac
++    name: Spark RBAC
++    section: data-services
++    upstreamVersion: 1.0.1
++    upstreamVersionSource: package tag
++    package:
++      repository: quay.io/okdp/platform-packages/spark-rbac
++      tag: 1.0.1-p02
++    provenance:
++      - okdp-chart
++    protected: false
++    description: Namespace roles and bindings letting Spark applications run in a project.
++    primaryChart: &a59
++      name: spark-rbac
++      version: 1.0.1
++      repository: quay.io/okdp/charts/spark-rbac
++      origin: okdp
++    primaryImage: null
++    charts:
++      - *a59
++    images: []
++    modules:
++      - name: main
++        charts:
++          - *a59
++        images: []
++    links:
++      upstream: null
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/spark-rbac/spark-rbac.yaml
++    logo: spark.svg
++  - id: trino
++    name: Trino
++    section: data-services
++    upstreamVersion: "480"
++    upstreamVersionSource: metadata override
++    package:
++      repository: quay.io/okdp/platform-packages/trino
++      tag: 480.0.0-p21
++    provenance:
++      - upstream-chart
++    protected: false
++    description: Distributed SQL query engine designed for large-scale data processing across multiple data sources.
++    primaryChart: &a60
++      name: trino
++      version: v1.42.1
++      repository: https://trinodb.github.io/charts/
++      origin: upstream
++    primaryImage: &a61
++      repository: trinodb/trino
++      tag: "480"
++    charts:
++      - &a62
++        name: internal-secrets
++        version: null
++        repository: null
++        origin: local
++      - &a63
++        name: opa-kube-mgmt
++        version: 11.0.7
++        repository: https://open-policy-agent.github.io/kube-mgmt/charts
++        origin: upstream
++      - &a65
++        name: opal-secrets
++        version: 0.1.1
++        repository: quay.io/okdp/charts/opal-secrets
++        origin: okdp
++      - &a66
++        name: opal
++        version: 0.0.30
++        repository: https://permitio.github.io/opal-helm-chart
++        origin: upstream
++      - &a69
++        name: oidc-dcr
++        version: 0.3.2
++        repository: quay.io/adaltas/oidc-dcr
++        origin: upstream
++      - *a60
++    images:
++      - &a64
++        repository: openpolicyagent/opa
++        tag: 1.16.1
++      - &a67
++        repository: permitio/opal-client-standalone
++        tag: 0.9.4
++      - &a68
++        repository: permitio/opal-server
++        tag: 0.9.4
++      - *a61
++    modules:
++      - name: internal-secrets
++        charts:
++          - *a62
++        images: []
++      - name: opa
++        charts:
++          - *a63
++        images:
++          - *a64
++      - name: opal-secrets
++        charts:
++          - *a65
++        images: []
++      - name: opal
++        charts:
++          - *a66
++        images:
++          - *a67
++          - *a68
++      - name: oidc-dcr
++        charts:
++          - *a69
++        images: []
++      - name: main
++        charts:
++          - *a60
++        images:
++          - *a61
++    links:
++      upstream: https://trino.io
++      source: https://github.com/OKDP/platform-packages/blob/main/packages/services/trino/trino.yaml
++    logo: trino.svg

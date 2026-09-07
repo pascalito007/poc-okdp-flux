@@ -1,0 +1,40 @@
+From 848f9542514973073cfb7e7bf50097323316bfd2 Mon Sep 17 00:00:00 2001
+From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
+Date: Mon, 7 Sep 2026 11:51:37 +0200
+Subject: [PATCH 4/4] feat(stack): parse both package tag formats
+
+---
+ scripts/build-stack.mjs | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/scripts/build-stack.mjs b/scripts/build-stack.mjs
+index 87b3ac6..01f914e 100644
+--- a/scripts/build-stack.mjs
++++ b/scripts/build-stack.mjs
+@@ -330,13 +330,21 @@ function provenanceOf(primary) {
+ /**
+  * The version a reader cares about: "Trino 480", not the package tag.
+  *
+- * Package tags are usually `<upstream>-pNN`, but not always: trino carries a
+- * SemVer-shaped tag the console's parser requires, and keycloak's tag tracks
+- * the Bitnami chart rather than Keycloak itself. Those are named explicitly in
+- * stack-metadata.yaml; everything else is derived and cross-checked.
++ * Two tag shapes are supported, so the inventory survives the release-please
++ * migration without a rewrite:
++ *
++ *   <upstream>-pNN       today, e.g. 3.5.1-p08
++ *   <upstream>-X.Y.Z     after the migration, e.g. 3.5.1-1.0.0
++ *
++ * Both carry the upstream version in front, which is the part a reader wants.
++ * Two packages still need naming explicitly in stack-metadata.yaml: trino
++ * carries a SemVer-shaped tag the console's parser requires, and keycloak's tag
++ * tracks the Bitnami chart rather than Keycloak itself.
+  */
++const PACKAGE_SUFFIX = /-(?:p\d+|\d+\.\d+\.\d+)$/;
++
+ function upstreamVersionOf(pkg, primary, override) {
+-  const derived = pkg.tag.replace(/-p\d+$/, "");
++  const derived = pkg.tag.replace(PACKAGE_SUFFIX, "");
+   if (override)
+     return { version: String(override), source: "metadata override", derived };
+ 

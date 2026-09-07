@@ -1,0 +1,1181 @@
+From c0ee60a0a42f5e166b62f5e1163294afc01a0c8e Mon Sep 17 00:00:00 2001
+From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
+Date: Mon, 7 Sep 2026 11:25:10 +0200
+Subject: [PATCH 3/4] feat(stack): add the OKDP component inventory page
+
+---
+ README.md                                     |  51 +++++
+ scripts/build-stack.mjs                       |  37 +++-
+ src/components/common/MarketingNavLinks.astro |   9 +
+ src/components/stack/ComponentRow.astro       | 188 ++++++++++++++++++
+ src/components/stack/ProvenanceBadge.astro    |  30 +++
+ src/components/stack/StackSection.astro       |  44 ++++
+ src/content.config.ts                         |  63 +++++-
+ src/data/stack/okdp-1-0.yaml                  |  10 +-
+ src/i18n/en.json                              |  69 +++++++
+ src/i18n/fr.json                              |  69 +++++++
+ src/lib/stack.ts                              |  85 ++++++++
+ src/pages/[lang]/stack/[version].astro        | 167 ++++++++++++++++
+ src/pages/[lang]/stack/index.astro            |  69 +++++++
+ src/types/stack.ts                            |  82 ++++++++
+ 14 files changed, 961 insertions(+), 12 deletions(-)
+ create mode 100644 src/components/stack/ComponentRow.astro
+ create mode 100644 src/components/stack/ProvenanceBadge.astro
+ create mode 100644 src/components/stack/StackSection.astro
+ create mode 100644 src/lib/stack.ts
+ create mode 100644 src/pages/[lang]/stack/[version].astro
+ create mode 100644 src/pages/[lang]/stack/index.astro
+ create mode 100644 src/types/stack.ts
+
+diff --git a/README.md b/README.md
+index 90b1635..692f3f4 100644
+--- a/README.md
++++ b/README.md
+@@ -32,6 +32,57 @@ npm run build
+ npm run preview
+ ```
+ 
++## Stack inventory
++
++`/stack/<version>` lists every component shipped in an OKDP release, with its
++version, provenance and source links. The data is **generated**, not written by
++hand: `src/data/stack/okdp-1-0.yaml` is produced by `scripts/build-stack.mjs`
++from the KubOCD Package manifests in
++[`platform-packages`](https://github.com/OKDP/platform-packages) and
++[`sandbox-dependencies`](https://github.com/OKDP/sandbox-dependencies).
++
++The generator runs when a release is cut, never during `astro build`. Its output
++is committed, so the site build stays offline and deterministic, and every
++version change lands as a reviewable diff.
++
++### Regenerating
++
++```bash
++node scripts/build-stack.mjs --stack 1.0
++git diff src/data/stack/   # expect no change unless a package actually moved
++```
++
++By default it clones both package repositories from `OKDP` at their current
++`main`. To generate from a local checkout instead:
++
++```bash
++node scripts/build-stack.mjs --stack 1.0 \
++  --repo platform-packages=../platform-packages
++```
++
++A local checkout is only safe if it is level with `main`. The generator warns
++when it is not: a stale one parses fine and silently produces a different
++platform. Prefer the default unless you are testing an unmerged change.
++
++### Adding a release
++
++```bash
++node scripts/build-stack.mjs --stack 1.1
++```
++
++This writes `src/data/stack/okdp-1-1.yaml`, and the new route appears
++automatically. Existing stack files are never rewritten, so a shipped inventory
++stays frozen at what that release contained.
++
++### Editing what is shown
++
++Versions, charts, images and provenance are all derived from the package
++manifests. Do not edit the generated file: re-run the script.
++
++Everything that cannot be derived (display names, project homepages, logos, and
++the occasional upstream version a package tag cannot express) lives in
++`scripts/stack-metadata.yaml`. That is the file to edit.
++
+ ## Preview deployments from forks
+ 
+ To let contributors share a live preview without deploying anything in the upstream `OKDP` organization, the repository includes a fork-only GitHub Actions workflow in `.github/workflows/preview.yml`.
+diff --git a/scripts/build-stack.mjs b/scripts/build-stack.mjs
+index 77c1c13..87b3ac6 100644
+--- a/scripts/build-stack.mjs
++++ b/scripts/build-stack.mjs
+@@ -43,7 +43,7 @@ import {
+ import { dirname, join, relative, resolve } from "node:path";
+ import { tmpdir } from "node:os";
+ import { fileURLToPath } from "node:url";
+-import { parse, stringify } from "yaml";
++import { parse, stringify, Scalar } from "yaml";
+ 
+ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+ 
+@@ -81,6 +81,16 @@ function parseArgs(argv) {
+   return args;
+ }
+ 
++/**
++ * Forces a double-quoted scalar. Without this an ISO date round-trips through
++ * YAML as a timestamp rather than a string, and the collection schema rejects it.
++ */
++function quoted(value) {
++  const scalar = new Scalar(value);
++  scalar.type = Scalar.QUOTE_DOUBLE;
++  return scalar;
++}
++
+ function fail(message) {
+   console.error(`build-stack: ${message}`);
+   process.exit(1);
+@@ -109,11 +119,13 @@ function resolveSources({ repos }) {
+       execFileSync("git", ["clone", "--depth", "1", "--quiet", repo.url, dir]);
+       sources[name] = dir;
+     }
+-    const head = execFileSync("git", ["-C", sources[name], "rev-parse", "HEAD"])
+-      .toString()
+-      .trim();
+-    console.error(`  ${name} @ ${head.slice(0, 7)}  (${sources[name]})`);
+-    sources[name] = { path: sources[name], head };
++    const path = sources[name];
++    const head = git(path, "rev-parse", "HEAD");
++    // The source commit date, not the time the script ran: keeping the output
++    // deterministic is what lets a re-run be diffed to detect drift.
++    const date = git(path, "show", "-s", "--format=%cI", "HEAD");
++    console.error(`  ${name} @ ${head.slice(0, 7)}  (${path})`);
++    sources[name] = { path, head, date };
+   }
+   return sources;
+ }
+@@ -275,7 +287,7 @@ const basename = (ref) => (ref ?? "").split("/").pop();
+ /**
+  * Picks the chart and image that *are* the component, as opposed to the helper
+  * modules packaged alongside it. Without this, Airflow reports `oidc-dcr` and
+- * Trino reports `internal-secrets` — both plumbing.
++ * Trino reports `internal-secrets`, both of which are plumbing.
+  */
+ function selectPrimary(pkg, modules, meta) {
+   const charts = modules.flatMap((module) => module.charts);
+@@ -316,7 +328,7 @@ function provenanceOf(primary) {
+ }
+ 
+ /**
+- * The version a reader cares about — "Trino 480", not the package tag.
++ * The version a reader cares about: "Trino 480", not the package tag.
+  *
+  * Package tags are usually `<upstream>-pNN`, but not always: trino carries a
+  * SemVer-shaped tag the console's parser requires, and keycloak's tag tracks
+@@ -441,7 +453,14 @@ const output = {
+     by: "scripts/build-stack.mjs",
+     note: "Generated file. Re-run the script instead of editing by hand.",
+     sources: Object.fromEntries(
+-      Object.entries(sources).map(([name, source]) => [name, source.head]),
++      Object.entries(sources).map(([name, source]) => [
++        name,
++        {
++          sha: source.head,
++          date: source.date ? quoted(source.date.slice(0, 10)) : null,
++          url: `${REPOS[name].url.replace(/\.git$/, "")}/tree/${source.head}`,
++        },
++      ]),
+     ),
+   },
+   components,
+diff --git a/src/components/common/MarketingNavLinks.astro b/src/components/common/MarketingNavLinks.astro
+index 200ba3f..f429cc4 100644
+--- a/src/components/common/MarketingNavLinks.astro
++++ b/src/components/common/MarketingNavLinks.astro
+@@ -13,6 +13,7 @@ const { content, desktop = false, mobile = false } = Astro.props;
+ const locale = (Astro.currentLocale ?? defaultLocale) as Locale;
+ const homeUrl = getRelativeLocaleUrl(locale, "/");
+ const docsUrl = getRelativeLocaleUrl(locale, "/guides/example");
++const stackUrl = getRelativeLocaleUrl(locale, "/stack/");
+ const isHome =
+   Astro.url.pathname === "/" ||
+   Astro.url.pathname === homeUrl ||
+@@ -55,6 +56,14 @@ const homeSectionUrl = (section: string) =>
+         {content.nav.roadmap}
+       </a>
+     </li>
++    <li>
++      <a
++        href={stackUrl}
++        class="hover:text-primary focus-visible:text-primary block rounded-lg px-3 py-2 whitespace-nowrap text-inherit no-underline transition-colors duration-200 hover:bg-current/8 focus-visible:bg-current/8"
++      >
++        {content.nav.stack}
++      </a>
++    </li>
+ 
+     <li>
+       <a
+diff --git a/src/components/stack/ComponentRow.astro b/src/components/stack/ComponentRow.astro
+new file mode 100644
+index 0000000..21c4919
+--- /dev/null
++++ b/src/components/stack/ComponentRow.astro
+@@ -0,0 +1,188 @@
++---
++import ProvenanceBadge from "@/components/stack/ProvenanceBadge.astro";
++import ToolLogo from "@/components/home/ToolLogo.astro";
++import type { HomeTranslations } from "@/i18n/translations";
++import type { LocalizedComponent } from "@/types/stack";
++
++interface Props {
++  component: LocalizedComponent;
++  content: HomeTranslations;
++}
++
++const { component, content } = Astro.props;
++const copy = content.stackPage;
++
++const packageRef = `${component.package.repository}:${component.package.tag}`;
++const chart = component.primaryChart;
++const isPrerelease = /-(snapshot|rc|alpha|beta|incubating)/i.test(
++  component.upstreamVersion,
++);
++
++// Helper modules only: the primary chart and image already have their own
++// columns, and repeating them in the detail panel reads as duplication.
++const extraModules = component.modules
++  .map((module) => ({
++    name: module.name,
++    charts: module.charts.filter(
++      (entry) => entry.version && entry.repository !== chart?.repository,
++    ),
++    images: module.images.filter(
++      (image) =>
++        image.repository !== component.primaryImage?.repository ||
++        image.tag !== component.primaryImage?.tag,
++    ),
++  }))
++  .filter((module) => module.charts.length > 0 || module.images.length > 0);
++
++// Everything a filter should match, lowercased once at build time.
++const haystack = [
++  component.name,
++  component.id,
++  component.upstreamVersion,
++  component.package.tag,
++  chart?.name,
++  component.description,
++]
++  .filter(Boolean)
++  .join(" ")
++  .toLowerCase();
++---
++
++<details
++  class="group border-accent border-b"
++  data-component
++  data-section={component.section}
++  data-search={haystack}
++>
++  <summary
++    class="hover:bg-background-alt grid cursor-pointer list-none grid-cols-2 items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.5fr)_minmax(0,1.3fr)]"
++  >
++    <div class="flex min-w-0 items-center gap-2.5">
++      <span
++        class="text-text-light shrink-0 text-[10px] transition-transform group-open:rotate-90"
++        aria-hidden="true">▶</span
++      >
++      {
++        component.logo && (
++          <span class="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:h-full [&_svg]:w-full [&_svg]:object-contain">
++            <ToolLogo logo={`logos/${component.logo}`} label="" />
++          </span>
++        )
++      }
++      <span class="truncate text-sm font-semibold">{component.name}</span>
++    </div>
++
++    <div class="text-right md:text-left">
++      <span class="font-mono text-sm font-semibold break-all"
++        >{component.upstreamVersion}</span
++      >
++      {
++        isPrerelease && (
++          <span class="ms-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-amber-700">
++            {copy.badges.prerelease}
++          </span>
++        )
++      }
++    </div>
++
++    <div class="col-span-2 md:col-span-1">
++      <code class="text-text-light font-mono text-xs break-all"
++        >{component.package.tag}</code
++      >
++    </div>
++
++    <div class="col-span-2 flex flex-wrap gap-1 md:col-span-1">
++      {
++        component.provenance.map((provenance) => (
++          <ProvenanceBadge provenance={provenance} content={content} />
++        ))
++      }
++    </div>
++
++    <div
++      class="text-text-light col-span-2 truncate font-mono text-xs md:col-span-1"
++    >
++      {chart ? `${chart.name} ${chart.version ?? ""}`.trim() : ""}
++    </div>
++  </summary>
++
++  <div class="bg-background-alt border-accent border-t px-4 py-4 md:ps-11">
++    {
++      component.description && (
++        <p class="text-text-light mb-4 max-w-3xl text-sm">
++          {component.description}
++        </p>
++      )
++    }
++
++    <div class="mb-4 flex flex-wrap items-center gap-2">
++      <code
++        class="border-accent bg-background rounded border px-2 py-1 font-mono text-xs break-all"
++        >{packageRef}</code
++      >
++      <button
++        type="button"
++        class="border-accent hover:border-primary hover:text-primary rounded border px-2 py-1 text-xs transition-colors"
++        data-copy={packageRef}
++        data-copy-label={copy.copy.label}
++        data-copy-done={copy.copy.done}
++      >
++        {copy.copy.label}
++      </button>
++    </div>
++
++    {
++      extraModules.length > 0 && (
++        <div class="mb-4">
++          <h4 class="text-text-light mb-2 text-xs font-semibold tracking-wide uppercase">
++            {copy.details.modules}
++          </h4>
++          <ul class="space-y-1">
++            {extraModules.map((module) => (
++              <li class="text-text-light font-mono text-xs">
++                <span class="text-text font-sans font-medium">
++                  {module.name}
++                </span>
++                {module.charts.map(
++                  (entry) => ` · ${entry.name} ${entry.version}`,
++                )}
++                {module.images.map(
++                  (image) => ` · ${image.repository}:${image.tag}`,
++                )}
++              </li>
++            ))}
++          </ul>
++        </div>
++      )
++    }
++
++    <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs">
++      {
++        component.links.upstream && (
++          <a
++            href={component.links.upstream}
++            class="text-primary hover:underline"
++            rel="noopener noreferrer"
++            target="_blank"
++          >
++            {copy.details.upstream} ↗
++          </a>
++        )
++      }
++      <a
++        href={component.links.source}
++        class="text-primary hover:underline"
++        rel="noopener noreferrer"
++        target="_blank"
++      >
++        {copy.details.source} ↗
++      </a>
++    </div>
++  </div>
++</details>
++
++<style>
++  summary::-webkit-details-marker {
++    display: none;
++  }
++</style>
+diff --git a/src/components/stack/ProvenanceBadge.astro b/src/components/stack/ProvenanceBadge.astro
+new file mode 100644
+index 0000000..8e49c8b
+--- /dev/null
++++ b/src/components/stack/ProvenanceBadge.astro
+@@ -0,0 +1,30 @@
++---
++import type { HomeTranslations } from "@/i18n/translations";
++import type { Provenance } from "@/types/stack";
++
++interface Props {
++  provenance: Provenance;
++  content: HomeTranslations;
++}
++
++const { provenance, content } = Astro.props;
++const copy = content.stackPage.provenance[provenance];
++
++// Upstream is the neutral, expected case; OKDP-authored is what a reader is
++// scanning for, so only those two carry colour.
++const styles: Record<Provenance, string> = {
++  "upstream-chart": "border-accent text-text-light",
++  "okdp-chart": "border-primary/30 bg-primary/10 text-primary",
++  "okdp-image": "border-primary/30 bg-primary/10 text-primary",
++};
++---
++
++<span
++  class:list={[
++    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-tight whitespace-nowrap",
++    styles[provenance],
++  ]}
++  title={copy.description}
++>
++  {copy.label}
++</span>
+diff --git a/src/components/stack/StackSection.astro b/src/components/stack/StackSection.astro
+new file mode 100644
+index 0000000..a679f9c
+--- /dev/null
++++ b/src/components/stack/StackSection.astro
+@@ -0,0 +1,44 @@
++---
++import ComponentRow from "@/components/stack/ComponentRow.astro";
++import type { HomeTranslations } from "@/i18n/translations";
++import type { LocalizedSection } from "@/types/stack";
++
++interface Props {
++  section: LocalizedSection;
++  content: HomeTranslations;
++}
++
++const { section, content } = Astro.props;
++const columns = content.stackPage.columns;
++---
++
++<section class="mb-12" data-stack-section={section.id}>
++  <div class="mb-4">
++    <h2 class="mb-1 text-2xl font-bold">
++      {section.title}
++      <span class="text-text-light ms-2 text-base font-normal">
++        {section.components.length}
++      </span>
++    </h2>
++    <p class="text-text-light max-w-3xl text-sm">{section.description}</p>
++  </div>
++
++  <div class="border-accent bg-background overflow-hidden rounded-lg border">
++    <!-- Column labels mirror the summary grid; hidden where the row reflows. -->
++    <div
++      class="bg-background-alt border-accent text-text-light hidden border-b px-4 py-2 text-[11px] font-semibold tracking-wide uppercase md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.5fr)_minmax(0,1.3fr)] md:gap-x-4"
++    >
++      <span class="ps-5">{columns.component}</span>
++      <span>{columns.version}</span>
++      <span>{columns.package}</span>
++      <span>{columns.provenance}</span>
++      <span>{columns.chart}</span>
++    </div>
++
++    {
++      section.components.map((component) => (
++        <ComponentRow component={component} content={content} />
++      ))
++    }
++  </div>
++</section>
+diff --git a/src/content.config.ts b/src/content.config.ts
+index 36f41dc..8084666 100644
+--- a/src/content.config.ts
++++ b/src/content.config.ts
+@@ -1,5 +1,5 @@
+ import { defineCollection } from "astro:content";
+-import { file } from "astro/loaders";
++import { file, glob } from "astro/loaders";
+ import { docsLoader } from "@astrojs/starlight/loaders";
+ import { docsSchema } from "@astrojs/starlight/schema";
+ import { z } from "astro/zod";
+@@ -32,7 +32,68 @@ const events = defineCollection({
+   }),
+ });
+ 
++// One entry per released stack, generated by scripts/build-stack.mjs.
++// See src/types/stack.ts for the rendering-side shapes.
++const chartRef = z.object({
++  name: z.string(),
++  version: z.string().nullable(),
++  repository: z.string().nullable(),
++  origin: z.enum(["upstream", "okdp", "local"]),
++});
++
++const imageRef = z.object({ repository: z.string(), tag: z.string() });
++
++const stacks = defineCollection({
++  loader: glob({ pattern: "*.yaml", base: "src/data/stack" }),
++  schema: z.object({
++    stack: z.string(),
++    generated: z.object({
++      by: z.string(),
++      note: z.string(),
++      sources: z.record(
++        z.object({
++          sha: z.string(),
++          date: z.string().nullable(),
++          url: z.string(),
++        }),
++      ),
++    }),
++    components: z.array(
++      z.object({
++        id: z.string(),
++        name: z.string(),
++        section: z.enum(["data-services", "control-plane", "dependencies"]),
++        upstreamVersion: z.string(),
++        upstreamVersionSource: z.string(),
++        package: z.object({ repository: z.string(), tag: z.string() }),
++        provenance: z.array(
++          z.enum(["upstream-chart", "okdp-chart", "okdp-image"]),
++        ),
++        protected: z.boolean(),
++        description: localizedField.nullable(),
++        primaryChart: chartRef.nullable(),
++        primaryImage: imageRef.nullable(),
++        charts: z.array(chartRef),
++        images: z.array(imageRef),
++        modules: z.array(
++          z.object({
++            name: z.string(),
++            charts: z.array(chartRef),
++            images: z.array(imageRef),
++          }),
++        ),
++        links: z.object({
++          upstream: z.string().nullable(),
++          source: z.string(),
++        }),
++        logo: z.string().nullable(),
++      }),
++    ),
++  }),
++});
++
+ export const collections = {
+   docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+   events,
++  stacks,
+ };
+diff --git a/src/data/stack/okdp-1-0.yaml b/src/data/stack/okdp-1-0.yaml
+index d20a8a2..6c82e67 100644
+--- a/src/data/stack/okdp-1-0.yaml
++++ b/src/data/stack/okdp-1-0.yaml
+@@ -3,8 +3,14 @@ generated:
+   by: scripts/build-stack.mjs
+   note: Generated file. Re-run the script instead of editing by hand.
+   sources:
+-    platform-packages: 082e702722bcc395a2930bbd46f732c4486041c4
+-    sandbox-dependencies: 12bb63ac6d11b8b17bb3a4f8bbe4f04e2e477063
++    platform-packages:
++      sha: 082e702722bcc395a2930bbd46f732c4486041c4
++      date: "2026-09-04"
++      url: https://github.com/OKDP/platform-packages/tree/082e702722bcc395a2930bbd46f732c4486041c4
++    sandbox-dependencies:
++      sha: 12bb63ac6d11b8b17bb3a4f8bbe4f04e2e477063
++      date: "2026-08-28"
++      url: https://github.com/OKDP/sandbox-dependencies/tree/12bb63ac6d11b8b17bb3a4f8bbe4f04e2e477063
+ components:
+   - id: airflow
+     name: Apache Airflow
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+index ac37a5a..0c89feb 100644
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -10,6 +10,7 @@
+     "about": "About",
+     "architecture": "Architecture",
+     "roadmap": "Roadmap",
++    "stack": "Stack",
+     "community": "Community",
+     "documentation": "Docs"
+   },
+@@ -585,5 +586,73 @@
+         }
+       ]
+     }
++  },
++  "stackPage": {
++    "meta": {
++      "title": "OKDP {version} stack | Open Kubernetes Data Platform",
++      "description": "Every component shipped in OKDP, with its version, where it comes from and a link to its source."
++    },
++    "title": "OKDP {version}",
++    "subtitle": "Every component in this release, the version it ships, and where it comes from.",
++    "summary": "{total} components · {upstreamOnly} upstream charts used unmodified",
++    "generatedFrom": "Generated from",
++    "sections": {
++      "data-services": {
++        "title": "Data & AI services",
++        "description": "The services users run: query engines, notebooks, orchestration and BI."
++      },
++      "control-plane": {
++        "title": "Control plane",
++        "description": "OKDP's own automation layer: the API server and the web console."
++      },
++      "dependencies": {
++        "title": "Platform dependencies",
++        "description": "Cluster services OKDP relies on: identity, storage, certificates and ingress."
++      }
++    },
++    "columns": {
++      "component": "Component",
++      "version": "Version",
++      "package": "Package",
++      "provenance": "Provenance",
++      "chart": "Chart"
++    },
++    "provenance": {
++      "upstream-chart": {
++        "label": "Upstream chart",
++        "description": "Used as published by the upstream project, unmodified."
++      },
++      "okdp-chart": {
++        "label": "OKDP chart",
++        "description": "Helm chart authored and published by OKDP."
++      },
++      "okdp-image": {
++        "label": "OKDP image",
++        "description": "Container image rebuilt by OKDP."
++      }
++    },
++    "filter": {
++      "label": "Filter components",
++      "placeholder": "Search a component, version or chart...",
++      "empty": "No component matches that filter."
++    },
++    "details": {
++      "modules": "Included modules",
++      "source": "Package definition",
++      "upstream": "Project"
++    },
++    "badges": { "prerelease": "Pre-release" },
++    "copy": { "label": "Copy", "done": "Copied" },
++    "index": {
++      "meta": {
++        "title": "OKDP stacks | Open Kubernetes Data Platform",
++        "description": "What each OKDP release contains, component by component."
++      },
++      "title": "OKDP stacks",
++      "subtitle": "What each OKDP release contains, component by component.",
++      "cta": "View the inventory",
++      "current": "Current",
++      "components": "components"
++    }
+   }
+ }
+diff --git a/src/i18n/fr.json b/src/i18n/fr.json
+index 7329749..b69598d 100644
+--- a/src/i18n/fr.json
++++ b/src/i18n/fr.json
+@@ -10,6 +10,7 @@
+     "about": "À propos",
+     "architecture": "Architecture",
+     "roadmap": "Roadmap",
++    "stack": "Stack",
+     "community": "Communauté",
+     "documentation": "Docs"
+   },
+@@ -594,5 +595,73 @@
+         }
+       ]
+     }
++  },
++  "stackPage": {
++    "meta": {
++      "title": "Stack OKDP {version} | Open Kubernetes Data Platform",
++      "description": "Tous les composants livrés dans OKDP, avec leur version, leur provenance et un lien vers leur source."
++    },
++    "title": "OKDP {version}",
++    "subtitle": "Tous les composants de cette version, la version livrée et son origine.",
++    "summary": "{total} composants · {upstreamOnly} charts upstream utilisés sans modification",
++    "generatedFrom": "Généré depuis",
++    "sections": {
++      "data-services": {
++        "title": "Services Data & IA",
++        "description": "Les services utilisés au quotidien : moteurs de requêtes, notebooks, orchestration et BI."
++      },
++      "control-plane": {
++        "title": "Control plane",
++        "description": "La couche d'automatisation d'OKDP : le serveur d'API et la console web."
++      },
++      "dependencies": {
++        "title": "Dépendances de la plateforme",
++        "description": "Les services cluster dont OKDP dépend : identité, stockage, certificats et ingress."
++      }
++    },
++    "columns": {
++      "component": "Composant",
++      "version": "Version",
++      "package": "Package",
++      "provenance": "Provenance",
++      "chart": "Chart"
++    },
++    "provenance": {
++      "upstream-chart": {
++        "label": "Chart upstream",
++        "description": "Utilisé tel que publié par le projet upstream, sans modification."
++      },
++      "okdp-chart": {
++        "label": "Chart OKDP",
++        "description": "Chart Helm développé et publié par OKDP."
++      },
++      "okdp-image": {
++        "label": "Image OKDP",
++        "description": "Image conteneur reconstruite par OKDP."
++      }
++    },
++    "filter": {
++      "label": "Filtrer les composants",
++      "placeholder": "Rechercher un composant, une version ou un chart...",
++      "empty": "Aucun composant ne correspond à ce filtre."
++    },
++    "details": {
++      "modules": "Modules inclus",
++      "source": "Définition du package",
++      "upstream": "Projet"
++    },
++    "badges": { "prerelease": "Pré-version" },
++    "copy": { "label": "Copier", "done": "Copié" },
++    "index": {
++      "meta": {
++        "title": "Stacks OKDP | Open Kubernetes Data Platform",
++        "description": "Le contenu de chaque version d'OKDP, composant par composant."
++      },
++      "title": "Stacks OKDP",
++      "subtitle": "Le contenu de chaque version d'OKDP, composant par composant.",
++      "cta": "Voir l'inventaire",
++      "current": "Version actuelle",
++      "components": "composants"
++    }
+   }
+ }
+diff --git a/src/lib/stack.ts b/src/lib/stack.ts
+new file mode 100644
+index 0000000..e9b716e
+--- /dev/null
++++ b/src/lib/stack.ts
+@@ -0,0 +1,85 @@
++import { getCollection, type CollectionEntry } from "astro:content";
++import type { Locale } from "@/i18n/config";
++import type { HomeTranslations } from "@/i18n/translations";
++import type {
++  LocalizedComponent,
++  LocalizedStack,
++  LocalizedField,
++  SectionId,
++  StackComponent,
++} from "@/types/stack";
++
++const SECTION_ORDER: SectionId[] = [
++  "data-services",
++  "control-plane",
++  "dependencies",
++];
++
++function getLocalizedField(
++  field: LocalizedField | null | undefined,
++  locale: Locale,
++): string | null {
++  if (!field) return null;
++  if (typeof field === "string") return field;
++  return field[locale] || field.en || null;
++}
++
++function localizeComponent(
++  component: StackComponent,
++  locale: Locale,
++): LocalizedComponent {
++  return {
++    ...component,
++    description: getLocalizedField(component.description, locale),
++  };
++}
++
++/** "okdp-1-0" -> "1.0", matching the stack version the generator recorded. */
++export function slugToVersion(slug: string): string {
++  return slug.replace(/^okdp-/, "").replace(/-/g, ".");
++}
++
++export async function getStackEntries(): Promise<CollectionEntry<"stacks">[]> {
++  const entries = await getCollection("stacks");
++  return entries.sort((a, b) =>
++    b.data.stack.localeCompare(a.data.stack, undefined, { numeric: true }),
++  );
++}
++
++export async function getLocalizedStack(
++  slug: string,
++  locale: Locale,
++  content: HomeTranslations,
++): Promise<LocalizedStack | null> {
++  const entries = await getStackEntries();
++  const entry = entries.find((candidate) => candidate.id === slug);
++  if (!entry) return null;
++
++  const components = entry.data.components.map((component) =>
++    localizeComponent(component as StackComponent, locale),
++  );
++
++  const sections = SECTION_ORDER.map((id) => ({
++    id,
++    title: content.stackPage.sections[id].title,
++    description: content.stackPage.sections[id].description,
++    components: components.filter((component) => component.section === id),
++  })).filter((section) => section.components.length > 0);
++
++  return {
++    version: entry.data.stack,
++    slug: entry.id,
++    sections,
++    components,
++    counts: {
++      total: components.length,
++      // The "we don't fork the ecosystem" figure, computed rather than claimed.
++      upstreamOnly: components.filter(
++        (component) =>
++          component.provenance.length === 1 &&
++          component.provenance[0] === "upstream-chart",
++      ).length,
++    },
++    sources: entry.data.generated.sources,
++  };
++}
+diff --git a/src/pages/[lang]/stack/[version].astro b/src/pages/[lang]/stack/[version].astro
+new file mode 100644
+index 0000000..f9b2b90
+--- /dev/null
++++ b/src/pages/[lang]/stack/[version].astro
+@@ -0,0 +1,167 @@
++---
++import type { GetStaticPaths } from "astro";
++
++import StackSection from "@/components/stack/StackSection.astro";
++import MarketingLayout from "@/layouts/MarketingLayout.astro";
++import { localeCodes, type Locale } from "@/i18n/config";
++import { getTranslations } from "@/i18n/translations";
++import { getLocalizedStack, getStackEntries } from "@/lib/stack";
++
++export const getStaticPaths = (async () => {
++  const entries = await getStackEntries();
++  return localeCodes.flatMap((lang) =>
++    entries.map((entry) => ({ params: { lang, version: entry.id } })),
++  );
++}) satisfies GetStaticPaths;
++
++const locale = Astro.currentLocale as Locale;
++const content = getTranslations(locale);
++const copy = content.stackPage;
++
++const { version } = Astro.params;
++const stack = await getLocalizedStack(version!, locale, content);
++// Unreachable: getStaticPaths only emits routes for entries that exist. Fail
++// the build loudly rather than shipping a blank page if that ever changes.
++if (!stack) throw new Error(`No stack entry for '${version}'`);
++
++const title = copy.title.replace("{version}", stack.version);
++const summary = copy.summary
++  .replace("{total}", String(stack.counts.total))
++  .replace("{upstreamOnly}", String(stack.counts.upstreamOnly));
++
++// Provenance for the reader: which commit of each package repo this inventory
++// was built from, dated so it can be judged without decoding a SHA.
++const dateFormat = new Intl.DateTimeFormat(locale, {
++  day: "numeric",
++  month: "long",
++  year: "numeric",
++});
++const sources = Object.entries(stack.sources).map(([name, source]) => ({
++  name,
++  url: source.url,
++  sha: source.sha.slice(0, 7),
++  date: source.date
++    ? dateFormat.format(new Date(`${source.date}T00:00:00Z`))
++    : null,
++}));
++---
++
++<MarketingLayout
++  content={content}
++  title={copy.meta.title.replace("{version}", stack.version)}
++  description={copy.meta.description}
++>
++  <main>
++    <section class="from-accent to-background bg-linear-to-b pt-36 pb-8">
++      <div class="container">
++        <div class="mx-auto max-w-3xl text-center">
++          <h1 class="text-gradient mb-3">{title}</h1>
++          <p class="text-text-light mb-4">{copy.subtitle}</p>
++          <p class="text-text-light text-sm font-medium">{summary}</p>
++        </div>
++      </div>
++    </section>
++
++    <section class="section bg-background pt-4">
++      <div class="container">
++        <div class="mx-auto max-w-6xl">
++          <div class="mb-8">
++            <label class="sr-only" for="stack-filter">{copy.filter.label}</label
++            >
++            <input
++              id="stack-filter"
++              type="search"
++              autocomplete="off"
++              placeholder={copy.filter.placeholder}
++              class="border-accent bg-background focus:border-primary w-full rounded-lg border px-4 py-2.5 text-sm outline-none md:max-w-md"
++            />
++          </div>
++
++          {
++            stack.sections.map((section) => (
++              <StackSection section={section} content={content} />
++            ))
++          }
++
++          <p
++            class="text-text-light py-10 text-center text-sm"
++            data-stack-empty
++            hidden
++          >
++            {copy.filter.empty}
++          </p>
++
++          <p class="text-text-light border-accent border-t pt-6 text-xs">
++            {copy.generatedFrom}{" "}
++            {
++              sources.map((source, index) => (
++                <>
++                  <a
++                    href={source.url}
++                    class="text-primary font-mono hover:underline"
++                    rel="noopener noreferrer"
++                    target="_blank"
++                  >
++                    {source.name}@{source.sha}
++                  </a>
++                  {source.date && ` (${source.date})`}
++                  {index < sources.length - 1 ? ", " : "."}
++                </>
++              ))
++            }
++          </p>
++        </div>
++      </div>
++    </section>
++  </main>
++</MarketingLayout>
++
++<script>
++  // Progressive enhancement: without JS every component is already visible and
++  // every row still expands, because the rows are <details> elements.
++  const filter = document.querySelector<HTMLInputElement>("#stack-filter");
++  const rows = Array.from(
++    document.querySelectorAll<HTMLDetailsElement>("[data-component]"),
++  );
++  const sections = Array.from(
++    document.querySelectorAll<HTMLElement>("[data-stack-section]"),
++  );
++  const empty = document.querySelector<HTMLElement>("[data-stack-empty]");
++
++  function applyFilter(term: string) {
++    const needle = term.trim().toLowerCase();
++    for (const row of rows) {
++      const match = !needle || (row.dataset.search ?? "").includes(needle);
++      row.hidden = !match;
++      if (!match) row.open = false;
++    }
++    let anyVisible = false;
++    for (const section of sections) {
++      const visible = Array.from(
++        section.querySelectorAll<HTMLDetailsElement>("[data-component]"),
++      ).some((row) => !row.hidden);
++      section.hidden = !visible;
++      anyVisible ||= visible;
++    }
++    if (empty) empty.hidden = anyVisible;
++  }
++
++  filter?.addEventListener("input", () => applyFilter(filter.value));
++
++  for (const button of document.querySelectorAll<HTMLButtonElement>(
++    "[data-copy]",
++  )) {
++    button.addEventListener("click", async () => {
++      try {
++        await navigator.clipboard.writeText(button.dataset.copy ?? "");
++        button.textContent = button.dataset.copyDone ?? "Copied";
++        setTimeout(() => {
++          button.textContent = button.dataset.copyLabel ?? "Copy";
++        }, 1500);
++      } catch {
++        // Clipboard is unavailable (insecure context, denied permission).
++        // The reference stays selectable next to the button.
++      }
++    });
++  }
++</script>
+diff --git a/src/pages/[lang]/stack/index.astro b/src/pages/[lang]/stack/index.astro
+new file mode 100644
+index 0000000..124c493
+--- /dev/null
++++ b/src/pages/[lang]/stack/index.astro
+@@ -0,0 +1,69 @@
++---
++import type { GetStaticPaths } from "astro";
++import { getRelativeLocaleUrl } from "astro:i18n";
++
++import MarketingLayout from "@/layouts/MarketingLayout.astro";
++import { localeCodes, type Locale } from "@/i18n/config";
++import { getTranslations } from "@/i18n/translations";
++import { getStackEntries } from "@/lib/stack";
++
++export const getStaticPaths = (() => {
++  return localeCodes.map((lang) => ({ params: { lang } }));
++}) satisfies GetStaticPaths;
++
++const locale = Astro.currentLocale as Locale;
++const content = getTranslations(locale);
++const copy = content.stackPage.index;
++
++// Sorted newest first by getStackEntries, so the first entry is the current one.
++const entries = await getStackEntries();
++---
++
++<MarketingLayout
++  content={content}
++  title={copy.meta.title}
++  description={copy.meta.description}
++>
++  <main>
++    <section class="from-accent to-background bg-linear-to-b pt-36 pb-8">
++      <div class="container">
++        <div class="mx-auto max-w-3xl text-center">
++          <h1 class="text-gradient mb-3">{copy.title}</h1>
++          <p class="text-text-light">{copy.subtitle}</p>
++        </div>
++      </div>
++    </section>
++
++    <section class="section bg-background">
++      <div class="container">
++        <div class="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">
++          {
++            entries.map((entry, index) => (
++              <a
++                href={getRelativeLocaleUrl(locale, `/stack/${entry.id}`)}
++                class="bg-background border-accent hover:border-primary group block rounded-lg border p-6 no-underline transition-colors"
++              >
++                <div class="mb-2 flex items-center gap-3">
++                  <h2 class="group-hover:text-primary text-xl font-bold transition-colors">
++                    OKDP {entry.data.stack}
++                  </h2>
++                  {index === 0 && (
++                    <span class="bg-primary/10 text-primary rounded-full px-3 py-0.5 text-xs font-semibold">
++                      {copy.current}
++                    </span>
++                  )}
++                </div>
++                <p class="text-text-light mb-4 text-sm">
++                  {entry.data.components.length} {copy.components}
++                </p>
++                <span class="text-primary text-sm font-medium">
++                  {copy.cta} →
++                </span>
++              </a>
++            ))
++          }
++        </div>
++      </div>
++    </section>
++  </main>
++</MarketingLayout>
+diff --git a/src/types/stack.ts b/src/types/stack.ts
+new file mode 100644
+index 0000000..759245d
+--- /dev/null
++++ b/src/types/stack.ts
+@@ -0,0 +1,82 @@
++import type { Locale } from "@/i18n/config";
++
++export type LocalizedField = string | Partial<Record<Locale, string>>;
++
++/** How OKDP obtains a component, shown as badges in the Provenance column. */
++export type Provenance = "upstream-chart" | "okdp-chart" | "okdp-image";
++
++export type SectionId = "data-services" | "control-plane" | "dependencies";
++
++export interface ChartRef {
++  name: string;
++  version: string | null;
++  repository: string | null;
++  origin: "upstream" | "okdp" | "local";
++}
++
++export interface ImageRef {
++  repository: string;
++  tag: string;
++}
++
++/** One module of a package: the component itself, or a helper alongside it. */
++export interface ModuleRef {
++  name: string;
++  charts: ChartRef[];
++  images: ImageRef[];
++}
++
++export interface StackComponent {
++  id: string;
++  name: string;
++  section: SectionId;
++  upstreamVersion: string;
++  upstreamVersionSource: string;
++  package: { repository: string; tag: string };
++  provenance: Provenance[];
++  protected: boolean;
++  description: LocalizedField | null;
++  primaryChart: ChartRef | null;
++  primaryImage: ImageRef | null;
++  charts: ChartRef[];
++  images: ImageRef[];
++  modules: ModuleRef[];
++  links: { upstream: string | null; source: string };
++  logo: string | null;
++}
++
++export interface StackSource {
++  sha: string;
++  date: string | null;
++  url: string;
++}
++
++export interface Stack {
++  stack: string;
++  generated: { by: string; note: string; sources: Record<string, StackSource> };
++  components: StackComponent[];
++}
++
++/** A component with its localized strings resolved, ready to render. */
++export interface LocalizedComponent extends Omit<
++  StackComponent,
++  "description"
++> {
++  description: string | null;
++}
++
++export interface LocalizedSection {
++  id: SectionId;
++  title: string;
++  description: string;
++  components: LocalizedComponent[];
++}
++
++export interface LocalizedStack {
++  version: string;
++  slug: string;
++  sections: LocalizedSection[];
++  components: LocalizedComponent[];
++  counts: { total: number; upstreamOnly: number };
++  sources: Record<string, StackSource>;
++}
