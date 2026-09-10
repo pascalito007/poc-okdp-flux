@@ -1,0 +1,196 @@
+From de77dd471910108b54426e3509d817a775752203 Mon Sep 17 00:00:00 2001
+From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
+Date: Thu, 10 Sep 2026 11:49:25 +0200
+Subject: [PATCH 2/3] fix(stack): show a plain notice and one full reference
+ per line
+
+The component panel restated the inside of each package as a list of modules,
+each with its charts written as a name, a version and a repository, and its
+images as references. Which module something belongs to is structure, not
+identity, and the package definition carries it authoritatively at the pinned
+commit.
+
+So the module scaffolding goes and every line is one full reference:
+
+    quay.io/okdp/charts/polaris-admin:1.0.0
+    polaris:1.3.0-incubating (https://downloads.apache.org/incubator/polaris/helm-chart/)
+    docker.io/apache/polaris:1.3.0-incubating
+    quay.io/okdp/polaris-console:v0.1.1
+
+Anything published to a registry is complete on its own. A chart served from a
+Helm repository is not, so its repository follows it: the reference and its
+website, nothing more. Local charts are vendored in the package repo and have no
+reference, so they stay out. Flattening also collapses duplicates the module
+boundaries preserved: Polaris used polaris-admin in two modules and listed it
+twice. 69 entries render, 67 distinct.
+
+The heading follows the content: "Included modules" becomes "Included
+references", and the key moves from details.modules to details.references.
+
+Ingress NGINX's retired-upstream notice renders here too, as plain text with no
+badge or label. d71d554 removed the pre-release badge from the summary row and
+nothing puts one back; the sentence carries the meaning on its own.
+
+That commit's leftovers go as well: ComponentRow still computed an isPrerelease
+nothing read, and badges.prerelease sat in both locale files with no consumer.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018eXbLQfdC8Jvb1wcMoShcc
+---
+ src/components/stack/ComponentRow.astro | 68 +++++++++++++------------
+ src/i18n/en.json                        |  8 ++-
+ src/i18n/fr.json                        |  8 ++-
+ 3 files changed, 47 insertions(+), 37 deletions(-)
+
+diff --git a/src/components/stack/ComponentRow.astro b/src/components/stack/ComponentRow.astro
+index 13ca96a..c29f01b 100644
+--- a/src/components/stack/ComponentRow.astro
++++ b/src/components/stack/ComponentRow.astro
+@@ -1,7 +1,7 @@
+ ---
+ import ProvenanceBadge from "@/components/stack/ProvenanceBadge.astro";
+ import type { HomeTranslations } from "@/i18n/translations";
+-import type { LocalizedComponent } from "@/types/stack";
++import type { ChartRef, LocalizedComponent } from "@/types/stack";
+ 
+ interface Props {
+   component: LocalizedComponent;
+@@ -13,25 +13,30 @@ const copy = content.stackPage;
+ 
+ const packageRef = `${component.package.repository}:${component.package.tag}`;
+ const chart = component.primaryChart;
+-const isPrerelease = /-(snapshot|rc|alpha|beta|incubating)/i.test(
+-  component.upstreamVersion,
+-);
++const notice = component.notice
++  ? copy.notices[component.notice.key as keyof typeof copy.notices]
++  : null;
++// Every reference the package pulls in, flat and deduplicated. The module a
++// reference belongs to is structure, not identity, and the package definition
++// carries it authoritatively.
++//
++// A chart published to a registry is a complete reference on its own. One served
++// from a Helm repository is not, so the repository follows it: the reference and
++// its website, nothing else. Local charts are vendored in the package repo and
++// have no reference at all.
++const chartRef = (entry: ChartRef) =>
++  entry.repository!.startsWith("http")
++    ? `${entry.name}:${entry.version} (${entry.repository})`
++    : `${entry.repository}:${entry.version}`;
+ 
+-// Helper modules only: the primary chart and image already have their own
+-// columns, and repeating them in the detail panel reads as duplication.
+-const extraModules = component.modules
+-  .map((module) => ({
+-    name: module.name,
+-    charts: module.charts.filter(
+-      (entry) => entry.version && entry.repository !== chart?.repository,
+-    ),
+-    images: module.images.filter(
+-      (image) =>
+-        image.repository !== component.primaryImage?.repository ||
+-        image.tag !== component.primaryImage?.tag,
+-    ),
+-  }))
+-  .filter((module) => module.charts.length > 0 || module.images.length > 0);
++const references = [
++  ...new Set([
++    ...component.charts
++      .filter((entry) => entry.version && entry.repository)
++      .map(chartRef),
++    ...component.images.map((image) => `${image.repository}:${image.tag}`),
++  ]),
++];
+ 
+ // Everything a filter should match, lowercased once at build time.
+ const haystack = [
+@@ -92,6 +97,13 @@ const haystack = [
+   </summary>
+ 
+   <div class="bg-background-alt border-accent border-t px-4 py-4 md:ps-11">
++    {
++      notice && (
++        <div class="mb-4 max-w-3xl rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
++          {notice.text}
++        </div>
++      )
++    }
+     {
+       component.description && (
+         <p class="text-text-light mb-4 max-w-3xl text-sm">
+@@ -117,24 +129,14 @@ const haystack = [
+     </div>
+ 
+     {
+-      extraModules.length > 0 && (
++      references.length > 0 && (
+         <div class="mb-4">
+           <h4 class="text-text-light mb-2 text-xs font-semibold tracking-wide uppercase">
+-            {copy.details.modules}
++            {copy.details.references}
+           </h4>
+           <ul class="space-y-1">
+-            {extraModules.map((module) => (
+-              <li class="text-text-light font-mono text-xs">
+-                <span class="text-text font-sans font-medium">
+-                  {module.name}
+-                </span>
+-                {module.charts.map(
+-                  (entry) => ` · ${entry.name} ${entry.version}`,
+-                )}
+-                {module.images.map(
+-                  (image) => ` · ${image.repository}:${image.tag}`,
+-                )}
+-              </li>
++            {references.map((ref) => (
++              <li class="text-text-light font-mono text-xs break-all">{ref}</li>
+             ))}
+           </ul>
+         </div>
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+index 9da2434..677d589 100644
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -637,11 +637,15 @@
+       "empty": "No component matches that filter."
+     },
+     "details": {
+-      "modules": "Included modules",
++      "references": "Included references",
+       "source": "Package definition",
+       "upstream": "Project"
+     },
+-    "badges": { "prerelease": "Pre-release" },
++    "notices": {
++      "ingress-nginx-retired": {
++        "text": "The Kubernetes project retired Ingress NGINX in March 2026; it receives no further releases, bugfixes or security updates. OKDP 1.0 ships it deliberately and existing deployments keep working. The migration path, whether Gateway API or another controller, will be decided after 1.0."
++      }
++    },
+     "copy": { "label": "Copy", "done": "Copied" },
+     "index": {
+       "meta": {
+diff --git a/src/i18n/fr.json b/src/i18n/fr.json
+index a6cf8be..101fd23 100644
+--- a/src/i18n/fr.json
++++ b/src/i18n/fr.json
+@@ -646,11 +646,15 @@
+       "empty": "Aucun composant ne correspond à ce filtre."
+     },
+     "details": {
+-      "modules": "Modules inclus",
++      "references": "R\u00e9f\u00e9rences incluses",
+       "source": "Définition du package",
+       "upstream": "Projet"
+     },
+-    "badges": { "prerelease": "Pré-version" },
++    "notices": {
++      "ingress-nginx-retired": {
++        "text": "Le projet Kubernetes a mis fin \u00e0 Ingress NGINX en mars 2026 : plus aucune version, correction de bogue ni mise \u00e0 jour de s\u00e9curit\u00e9. OKDP 1.0 l\u2019embarque d\u00e9lib\u00e9r\u00e9ment et les d\u00e9ploiements existants continuent de fonctionner. La strat\u00e9gie de migration, Gateway API ou un autre contr\u00f4leur, sera d\u00e9cid\u00e9e apr\u00e8s la 1.0."
++      }
++    },
+     "copy": { "label": "Copier", "done": "Copié" },
+     "index": {
+       "meta": {
+-- 
+2.55.0
+
