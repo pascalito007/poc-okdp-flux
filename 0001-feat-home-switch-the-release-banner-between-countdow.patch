@@ -1,6 +1,6 @@
-From 3d03cd6254278b5a15dc3a7e198bdc7fca3a6965 Mon Sep 17 00:00:00 2001
+From b2b74182c4b0acd7db6d0b981177f1fe9685fb77 Mon Sep 17 00:00:00 2001
 From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
-Date: Mon, 14 Sep 2026 11:39:58 +0200
+Date: Mon, 14 Sep 2026 15:26:46 +0200
 Subject: [PATCH] feat(home): switch the release banner between countdown and
  announcement
 
