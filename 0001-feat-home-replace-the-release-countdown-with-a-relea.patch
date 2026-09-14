@@ -1,0 +1,405 @@
+From 7a1fdd7dae6e038044943da3c4b6222c16475478 Mon Sep 17 00:00:00 2001
+From: Jean-Pascal MEWENEMESSE <pasciano007@gmail.com>
+Date: Mon, 14 Sep 2026 11:39:58 +0200
+Subject: [PATCH] feat(home): replace the release countdown with a release
+ announcement
+
+---
+ src/components/home/Countdown.astro     | 181 ------------------------
+ src/components/home/Hero.astro          |   6 +-
+ src/components/home/ReleaseBanner.astro | 100 +++++++++++++
+ src/i18n/en.json                        |  16 +--
+ src/i18n/fr.json                        |  16 +--
+ 5 files changed, 117 insertions(+), 202 deletions(-)
+ delete mode 100644 src/components/home/Countdown.astro
+ create mode 100644 src/components/home/ReleaseBanner.astro
+
+diff --git a/src/components/home/Countdown.astro b/src/components/home/Countdown.astro
+deleted file mode 100644
+index 4615734..0000000
+--- a/src/components/home/Countdown.astro
++++ /dev/null
+@@ -1,181 +0,0 @@
+----
+-import { getRelativeLocaleUrl } from "astro:i18n";
+-import { defaultLocale, type Locale } from "@/i18n/config";
+-import type { HomeTranslations } from "@/i18n/translations";
+-
+-interface Props {
+-  content: HomeTranslations;
+-}
+-
+-const { content } = Astro.props;
+-const locale = (Astro.currentLocale ?? defaultLocale) as Locale;
+-const { countdown } = content.hero;
+----
+-
+-<div
+-  class="group relative mx-auto mb-12 max-w-2xl"
+-  id="release-countdown"
+-  data-release="2026-09-14T10:00:00"
+-  data-done={countdown.done}
+->
+-  <span
+-    class="from-primary/30 via-primary-light/20 to-accent-alt/60 absolute -inset-6 rounded-[2.5rem] bg-linear-to-br blur-3xl"
+-  ></span>
+-  <span
+-    class="from-primary via-primary-light to-primary-dark absolute -inset-0.5 rounded-[1.8rem] bg-linear-to-r opacity-95"
+-  ></span>
+-  <div
+-    class="bg-background/92 ring-background/90 relative overflow-hidden rounded-[1.7rem] px-5 py-6 shadow-[0_30px_90px_-38px_rgba(65,144,141,0.95)] ring-1 backdrop-blur sm:px-8 sm:py-7"
+-  >
+-    <div
+-      class="from-background/95 via-background/80 to-background-alt absolute inset-0 bg-linear-to-br"
+-    >
+-    </div>
+-    <div
+-      class="via-background absolute inset-x-10 top-0 h-px bg-linear-to-r from-transparent to-transparent opacity-90"
+-    >
+-    </div>
+-    <div
+-      class="bg-primary/10 absolute inset-x-8 -bottom-12 h-20 rounded-full blur-2xl"
+-    >
+-    </div>
+-    <div class="relative flex flex-col items-center gap-5">
+-      <div
+-        class="border-primary/15 bg-background/90 ring-background/70 inline-flex items-center gap-2.5 rounded-full border px-4 py-2.5 shadow-sm ring-1"
+-      >
+-        <span
+-          class="bg-primary relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full"
+-        ></span>
+-        <span
+-          class="text-primary-dark text-sm font-bold tracking-[0.01em] sm:text-[0.95rem]"
+-          data-cd-label>{countdown.label}</span
+-        >
+-      </div>
+-
+-      <div class="grid w-full grid-cols-4 gap-2 sm:gap-3">
+-        <div
+-          class="border-primary/10 bg-background/80 rounded-2xl border px-2 py-4 shadow-sm sm:px-3"
+-        >
+-          <span
+-            class="text-text block text-4xl leading-none font-black tracking-tight tabular-nums sm:text-5xl"
+-            data-cd="days"
+-          >
+-            --
+-          </span>
+-          <span
+-            class="text-text-light mt-2 block text-[10px] font-bold tracking-[0.22em] uppercase"
+-          >
+-            {countdown.days}
+-          </span>
+-        </div>
+-        <div
+-          class="border-primary/10 bg-background/80 rounded-2xl border px-2 py-4 shadow-sm sm:px-3"
+-        >
+-          <span
+-            class="text-text block text-4xl leading-none font-black tracking-tight tabular-nums sm:text-5xl"
+-            data-cd="hours"
+-          >
+-            --
+-          </span>
+-          <span
+-            class="text-text-light mt-2 block text-[10px] font-bold tracking-[0.22em] uppercase"
+-          >
+-            {countdown.hours}
+-          </span>
+-        </div>
+-        <div
+-          class="border-primary/10 bg-background/80 rounded-2xl border px-2 py-4 shadow-sm sm:px-3"
+-        >
+-          <span
+-            class="text-text block text-4xl leading-none font-black tracking-tight tabular-nums sm:text-5xl"
+-            data-cd="minutes"
+-          >
+-            --
+-          </span>
+-          <span
+-            class="text-text-light mt-2 block text-[10px] font-bold tracking-[0.22em] uppercase"
+-          >
+-            {countdown.minutes}
+-          </span>
+-        </div>
+-        <div
+-          class="border-primary/10 bg-background/80 rounded-2xl border px-2 py-4 shadow-sm sm:px-3"
+-        >
+-          <span
+-            class="text-primary block text-4xl leading-none font-black tracking-tight tabular-nums sm:text-5xl"
+-            data-cd="seconds"
+-          >
+-            --
+-          </span>
+-          <span
+-            class="text-text-light mt-2 block text-[10px] font-bold tracking-[0.22em] uppercase"
+-          >
+-            {countdown.seconds}
+-          </span>
+-        </div>
+-      </div>
+-
+-      <a
+-        href={getRelativeLocaleUrl(locale, "/roadmap")}
+-        class="group/button from-primary to-primary-dark shadow-primary/20 focus:ring-primary/40 inline-flex items-center justify-center gap-2 rounded-full bg-linear-to-r px-5 py-3 text-sm font-bold text-white shadow-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 focus:outline-none"
+-        aria-label={countdown.cta}
+-      >
+-        <span>{countdown.cta}</span>
+-        <svg
+-          class="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 group-hover/button:translate-x-1 hover:translate-x-1"
+-          fill="none"
+-          stroke="currentColor"
+-          viewBox="0 0 24 24"
+-        >
+-          <path
+-            stroke-linecap="round"
+-            stroke-linejoin="round"
+-            stroke-width="2"
+-            d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+-        </svg>
+-      </a>
+-    </div>
+-  </div>
+-</div>
+-
+-<script>
+-  const root = document.getElementById("release-countdown");
+-
+-  if (root) {
+-    const target = new Date(root.dataset.release ?? "").getTime();
+-    const doneMsg = root.dataset.done ?? "";
+-    const days = root.querySelector<HTMLElement>('[data-cd="days"]');
+-    const hours = root.querySelector<HTMLElement>('[data-cd="hours"]');
+-    const minutes = root.querySelector<HTMLElement>('[data-cd="minutes"]');
+-    const seconds = root.querySelector<HTMLElement>('[data-cd="seconds"]');
+-    const label = root.querySelector<HTMLElement>("[data-cd-label]");
+-
+-    if (days && hours && minutes && seconds) {
+-      const pad = (value: number) => String(value).padStart(2, "0");
+-      let timer: number | undefined;
+-
+-      const tick = () => {
+-        const diff = target - Date.now();
+-
+-        if (diff <= 0) {
+-          days.textContent = "00";
+-          hours.textContent = "00";
+-          minutes.textContent = "00";
+-          seconds.textContent = "00";
+-          if (label && doneMsg) label.textContent = doneMsg;
+-          if (timer !== undefined) window.clearInterval(timer);
+-          return false;
+-        }
+-
+-        const remainingSeconds = Math.floor(diff / 1000);
+-        days.textContent = String(Math.floor(remainingSeconds / 86400));
+-        hours.textContent = pad(Math.floor((remainingSeconds % 86400) / 3600));
+-        minutes.textContent = pad(Math.floor((remainingSeconds % 3600) / 60));
+-        seconds.textContent = pad(remainingSeconds % 60);
+-        return true;
+-      };
+-
+-      if (tick()) timer = window.setInterval(tick, 1000);
+-    }
+-  }
+-</script>
+diff --git a/src/components/home/Hero.astro b/src/components/home/Hero.astro
+index 7efd339..801aed6 100644
+--- a/src/components/home/Hero.astro
++++ b/src/components/home/Hero.astro
+@@ -1,6 +1,6 @@
+ ---
+ import { getRelativeLocaleUrl } from "astro:i18n";
+-import Countdown from "@/components/home/Countdown.astro";
++import ReleaseBanner from "@/components/home/ReleaseBanner.astro";
+ import { defaultLocale, type Locale } from "@/i18n/config";
+ import type { HomeTranslations } from "@/i18n/translations";
+ 
+@@ -35,8 +35,8 @@ const docsUrl = getRelativeLocaleUrl(locale, "/installation-requirements");
+         </a>
+       </div>
+ 
+-      <!-- v1.0.0 Release Countdown -->
+-      <Countdown content={content} />
++      <!-- v1.0.0 release announcement -->
++      <ReleaseBanner content={content} />
+     </div>
+   </div>
+ </section>
+diff --git a/src/components/home/ReleaseBanner.astro b/src/components/home/ReleaseBanner.astro
+new file mode 100644
+index 0000000..32a6b97
+--- /dev/null
++++ b/src/components/home/ReleaseBanner.astro
+@@ -0,0 +1,100 @@
++---
++import { getRelativeLocaleUrl } from "astro:i18n";
++import { defaultLocale, type Locale } from "@/i18n/config";
++import type { HomeTranslations } from "@/i18n/translations";
++import { getStackEntries } from "@/lib/stack";
++
++interface Props {
++  content: HomeTranslations;
++}
++
++const { content } = Astro.props;
++const locale = (Astro.currentLocale ?? defaultLocale) as Locale;
++const { release } = content.hero;
++
++// The inventory of the newest shipped stack. getStackEntries sorts newest
++// first, so the banner follows the release without another hardcoded version.
++const [latestStack] = await getStackEntries();
++const stackUrl = getRelativeLocaleUrl(locale, `/stack/${latestStack.id}`);
++const roadmapUrl = getRelativeLocaleUrl(locale, "/roadmap");
++---
++
++<div class="group relative mx-auto mb-12 max-w-2xl">
++  <span
++    class="from-primary/30 via-primary-light/20 to-accent-alt/60 absolute -inset-6 rounded-[2.5rem] bg-linear-to-br blur-3xl"
++  ></span>
++  <span
++    class="from-primary via-primary-light to-primary-dark absolute -inset-0.5 rounded-[1.8rem] bg-linear-to-r opacity-95"
++  ></span>
++  <div
++    class="bg-background/92 ring-background/90 relative overflow-hidden rounded-[1.7rem] px-5 py-8 shadow-[0_30px_90px_-38px_rgba(65,144,141,0.95)] ring-1 backdrop-blur sm:px-8 sm:py-10"
++  >
++    <div
++      class="from-background/95 via-background/80 to-background-alt absolute inset-0 bg-linear-to-br"
++    >
++    </div>
++    <div
++      class="via-background absolute inset-x-10 top-0 h-px bg-linear-to-r from-transparent to-transparent opacity-90"
++    >
++    </div>
++    <div
++      class="bg-primary/10 absolute inset-x-8 -bottom-12 h-20 rounded-full blur-2xl"
++    >
++    </div>
++    <div class="relative flex flex-col items-center gap-5 text-center">
++      <div
++        class="border-primary/15 bg-background/90 ring-background/70 inline-flex items-center gap-2.5 rounded-full border px-4 py-2.5 shadow-sm ring-1"
++      >
++        <span
++          class="bg-primary relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full"
++        >
++          <span
++            class="bg-primary absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
++          ></span>
++        </span>
++        <span
++          class="text-primary-dark text-sm font-bold tracking-[0.01em] sm:text-[0.95rem]"
++        >
++          {release.badge}
++        </span>
++      </div>
++
++      <p
++        class="text-text text-4xl leading-none font-black tracking-tight sm:text-5xl"
++      >
++        {release.title}
++      </p>
++
++      <p class="text-text-light max-w-md text-base sm:text-lg">
++        {release.subtitle}
++      </p>
++
++      <a
++        href={stackUrl}
++        class="group/button from-primary to-primary-dark shadow-primary/20 focus:ring-primary/40 inline-flex items-center justify-center gap-2 rounded-full bg-linear-to-r px-5 py-3 text-sm font-bold text-white shadow-md transition-all duration-200 focus:ring-2 focus:ring-offset-2 focus:outline-none"
++        aria-label={release.cta}
++      >
++        <span>{release.cta}</span>
++        <svg
++          class="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 group-hover/button:translate-x-1 hover:translate-x-1"
++          fill="none"
++          stroke="currentColor"
++          viewBox="0 0 24 24"
++        >
++          <path
++            stroke-linecap="round"
++            stroke-linejoin="round"
++            stroke-width="2"
++            d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
++        </svg>
++      </a>
++
++      <a
++        href={roadmapUrl}
++        class="text-text-light hover:text-primary-dark text-sm font-semibold underline underline-offset-4 transition-colors duration-200"
++      >
++        {release.roadmapCta}
++      </a>
++    </div>
++  </div>
++</div>
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+index 3eefeaa..0289789 100644
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -20,14 +20,12 @@
+     "subtitle": "A free, open-source and cloud-native data platform built on Kubernetes. Modular, sovereign, and community-driven.",
+     "ctaPrimary": "Get started",
+     "ctaSecondary": "Join Community",
+-    "countdown": {
+-      "label": "Release v1.0.0 — 14 September 2026",
+-      "days": "Days",
+-      "hours": "Hours",
+-      "minutes": "Minutes",
+-      "seconds": "Seconds",
+-      "cta": "Discover the roadmap",
+-      "done": "v1.0.0 available 🎉"
++    "release": {
++      "badge": "v1.0.0 available",
++      "title": "OKDP v1.0.0 is here 🎉",
++      "subtitle": "The first stable release of the platform, available now.",
++      "cta": "See what ships in 1.0",
++      "roadmapCta": "What comes next"
+     }
+   },
+   "stats": {
+@@ -224,7 +222,7 @@
+   },
+   "roadmap": {
+     "title": "Roadmap",
+-    "teaser": "First release <strong class=\"text-text\">v1.0.0</strong> planned for <strong class=\"text-text\">the 14th September 2026</strong>.",
++    "teaser": "First release <strong class=\"text-text\">v1.0.0</strong> shipped on <strong class=\"text-text\">the 14th September 2026</strong>.",
+     "cta": "View the full roadmap"
+   },
+   "community": {
+diff --git a/src/i18n/fr.json b/src/i18n/fr.json
+index 1d83177..b2d29a9 100644
+--- a/src/i18n/fr.json
++++ b/src/i18n/fr.json
+@@ -20,14 +20,12 @@
+     "subtitle": "Une plateforme de données cloud-native, libre et 100% open source. Modulaire, souveraine et propulsée par la communauté.",
+     "ctaPrimary": "Démarrer",
+     "ctaSecondary": "Rejoindre la communauté",
+-    "countdown": {
+-      "label": "Release v1.0.0 — 14 septembre 2026",
+-      "days": "Jours",
+-      "hours": "Heures",
+-      "minutes": "Minutes",
+-      "seconds": "Secondes",
+-      "cta": "Découvrir la roadmap",
+-      "done": "v1.0.0 disponible 🎉"
++    "release": {
++      "badge": "v1.0.0 disponible",
++      "title": "OKDP v1.0.0 est là 🎉",
++      "subtitle": "La première version stable de la plateforme, disponible dès maintenant.",
++      "cta": "Découvrir la stack 1.0",
++      "roadmapCta": "La suite de la roadmap"
+     }
+   },
+   "stats": {
+@@ -224,7 +222,7 @@
+   },
+   "roadmap": {
+     "title": "Roadmap",
+-    "teaser": "Première release <strong class=\"text-text\">v1.0.0</strong> prévue pour <strong class=\"text-text\">14 Septembre 2026</strong>.",
++    "teaser": "Première release <strong class=\"text-text\">v1.0.0</strong> publiée le <strong class=\"text-text\">14 septembre 2026</strong>.",
+     "cta": "Consulter la roadmap complète"
+   },
+   "community": {
+
+base-commit: 2d135adca94b3eb3d58ab2f7d346c4a5aee8b912
+-- 
+2.55.0
+
