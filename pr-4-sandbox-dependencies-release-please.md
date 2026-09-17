@@ -1,20 +1,45 @@
-# PR 4 — `OKDP/sandbox-dependencies` — Phase 2, release-please
+# PR 4: `OKDP/sandbox-dependencies`, Phase 2, release-please
 
 > Org PR template: [`OKDP/.github/PULL_REQUEST_TEMPLATE.md`](https://github.com/OKDP/.github/blob/main/PULL_REQUEST_TEMPLATE.md)
-> Sibling of `pr-3-release-please.md`. **PR 2 is merged** (#32, 28 Aug), so apply
-> this onto a fresh branch off `main` (`12bb63a` at the time of writing).
-> Checked against the real repository, not assumed from `platform-packages`.
+> This is the branch PR **#37** uses, which is still a draft.
+> Read `pr-3-release-please.md` first: it carries the reasoning, the evidence
+> against release-please 17.11.2, and the compose script. This document is the
+> delta.
 
-### Three differences from PR 3, before you start
+> **Rewritten 17 Sep 2026.** The previous version had release-please own the
+> whole version, with every package restarting at `1.0.0` and the upstream
+> version dropped from the tag. The team sent that back. The superseded
+> document is in `rejected-design-2026-09-17/`.
 
-1. **Fourteen packages**, not thirteen, and one of them is a trap:
-   `packages/system/kubocd-webhooks` holds `webhooks.yaml`, **not**
-   `kubocd-webhooks.yaml`. Its `extra-files.path` must be `webhooks.yaml`.
-2. **There is no `charts/` directory** and no package references a chart by
-   relative path. The shared-chart guard from PR 3 is **not needed here**. This
-   is six edits, not seven.
-3. **The README carries a version table** that PR 3's repo does not — a fourth
-   hand-maintained copy of every version, and it is already wrong (see step 6).
+## The scheme
+
+Identical to PR 3: `tag: <upstream>-<OKDP X.Y.Z>`, so `24.4.11-p16` becomes
+`24.4.11-1.0.0`. The upstream half stays a human decision in a normal PR, the
+OKDP half is release-please's, and a step in `release-please.yml` joins them
+because release-please cannot emit a composite string. `pr-3-release-please.md`
+has the two failing candidate configurations and the runs that prove it.
+
+## Five differences from PR 3, before you start
+
+1. **Fourteen packages**, not thirteen, and one is a trap:
+   `packages/system/kubocd-webhooks` holds `webhooks.yaml`, not
+   `kubocd-webhooks.yaml`. Under the old design this mattered because
+   `extra-files.path` had to name the file. Under the new design `extra-files`
+   is gone, and `compose-oci-tag.sh` finds the manifest by grepping for
+   `^modules:` rather than by filename, so **the trap is defused**. Confirm it
+   anyway in review: this is the package most likely to be silently skipped.
+2. **There is no `charts/` directory** and no package embeds a chart by relative
+   path. PR 3's shared-chart guard is not needed here. Six edits, not eight.
+3. **The README carries a version table** that PR 3's repo does not: a fourth
+   hand-maintained copy of every version, already wrong in five of fourteen
+   rows.
+4. **`cnpg-postgresql`'s upstream version is `18.3`**, two segments, so
+   `18.3-1.0.0` is not valid SemVer. See **The `18.3` decision** below. This is
+   the one thing in either repo that the new scheme does not cleanly absorb.
+5. **Two upstream versions carry their own dash:** `kubauth` is
+   `0.3.0-snapshot-p03` and `kubocd-webhooks` is `v0.3.2-p01`. Both are handled,
+   because the split is anchored at the end of the string, but both belong in
+   the "How to Test" list.
 
 ### Branch
 
@@ -22,7 +47,7 @@
 chore/release-workflow
 ```
 
-Off `main`. This is the branch PR #37 actually uses.
+Off `main`.
 
 ### Title
 
@@ -30,17 +55,15 @@ Off `main`. This is the branch PR #37 actually uses.
 chore(ci): let release-please own the package versions
 ```
 
-Deliberately `chore:`, not `feat:`. If this is squash-merged the title becomes
-the subject of one commit touching all fourteen package directories, and
-release-please assigns commits by directory. A `feat:` title would open every
-one of the fourteen new changelogs with a spurious "Features: let release-please
-own the package versions" entry and force a minor bump on all of them. `chore`
-is not in `changelog-sections`, so it contributes nothing.
+Deliberately `chore:`, not `feat:`. On a squash merge the title becomes the
+subject of one commit touching all fourteen package directories, and
+release-please assigns commits by directory. A `feat:` title would open all
+fourteen new changelogs with a spurious "Features: let release-please own the
+package versions" and force a minor bump on every one. `chore` is not in
+`changelog-sections`, so it contributes nothing.
 
 **Commits.** `conventional-commits.yml` validates every commit in the pull
-request, not the title, so each commit must be conventional on its own. Keep
-them `chore:` for the same reason as the title: on a squash merge the title is
-what release-please reads, but on a merge or rebase the individual subjects are.
+request, not the title, so each commit must be conventional on its own.
 
 ### Body
 
@@ -49,111 +72,155 @@ what release-please reads, but on a merge or rebase the individual subjects are.
 
 The published version of a package is a literal typed into its manifest, and
 `kubocd package` has no tag override, so whatever sits in that field is what
-reaches the registry. #23 stopped the overwriting. This removes the cause.
+reaches the registry. #32 stopped the overwriting. This removes the cause.
 
-**`-pNN` is not a usable version.** Under SemVer a hyphen introduces a
-pre-release, so `1.17.1-p08` ranks *below* plain `1.17.1`. Three of the fourteen
-tags do not even parse as SemVer: `cnpg-postgresql` is `18.3-p03` (two
-segments), `kubocd-webhooks` is `v0.3.2-p01` (leading `v`), and `kubauth` is
-`0.3.0-snapshot-p03`.
+**The counter gets forgotten.** Across both package repos, 24 of 71 package
+edits shipped with no bump at all. Before the guard rails that silently
+overwrote a published tag; after them it fails CI, which is better but still a
+manual step on every single package change.
+
+**`-pNN` is not a version anyone can order.** It is a SemVer pre-release, so
+`24.4.11-p16` ranks below plain `24.4.11`, and the ordering only works today
+because the counter happens to be zero-padded.
 
 **There is no release.** Zero git tags, zero GitHub Releases,
-`.release-please-manifest.json` is `{}`. release-please has been installed the
-whole time but configured for the wrong repo shape — a single root package with
-`release-type: simple`, minting one repo-wide `v0.3.0` unrelated to the fourteen
-per-package tags that actually ship. Its release PR #2 has been open since
-24 July because that number means nothing to anyone.
-
-**The version is written down in three places and already disagrees with
-itself.** Each manifest's `tag:`, the README's package table, and the consuming
-pins in `OKDP/okdp-sandbox`. Five of the fourteen README rows are stale today:
-`external-secrets` (`p02` vs `p03`), `keycloak` (`p14` vs `p16`), `kubauth`
-(`p01` vs `p03`), `seaweedfs` (`p07` vs `p08`) and `vault` (`p01` vs `p03`).
+`.release-please-manifest.json` is empty. release-please has been installed the
+whole time but configured for the wrong repo shape: a single root package with
+`release-type: simple` and `initial-version: 0.3.0`, unrelated to the fourteen
+per-package tags that actually ship. Release PR #2 has been open since 24 July
+because that number means nothing to anyone.
 
 ### What changes
 
+**The tag keeps its upstream half and gains an automated one.**
+
+    tag: 24.4.11-p16   ->   tag: 24.4.11-1.0.0
+
+Left of the dash stays a human decision made in an ordinary reviewable PR, as
+today. Right of the dash is a plain `X.Y.Z` that release-please computes from
+the commit types. Only the old `-pNN` counter stops being hand-typed. The `p`
+goes because the suffix now has its own patch position.
+
 **One release-please component per package**, following the pattern already used
-in `OKDP/helm-charts-utilities`. Tags become `keycloak/v1.0.0`, each package gets
-its own `CHANGELOG.md`, and `separate-pull-requests: false` groups them into a
-single release pull request.
+in `OKDP/helm-charts-utilities`. Git tags become `keycloak/v1.0.0`, each package
+gets its own `CHANGELOG.md`, and `separate-pull-requests: false` groups them
+into a single release pull request.
 
-**release-please writes the OCI tag.** The `generic` updater replaces the version
-on any line carrying an `x-release-please-version` annotation. It is a line-level
-text substitution, so the rest of each manifest — module charts, image tags,
-schema — is untouched.
+**The OCI tag is composed, not overwritten.** release-please cannot produce a
+`<upstream>-<X.Y.Z>` string: its `generic` updater's regex swallows the whole
+composite, and `versioning: "prerelease"` rewrites the upstream half on any
+`feat:`. Both were run against release-please 17.11.2 to confirm. So this PR
+removes `extra-files` from the config and adds one step to `release-please.yml`
+that joins the prefix already in the file with the version release-please just
+computed.
 
-**Every package restarts at `1.0.0`.** The existing `-pNN` tags stay on the
-registry; nothing is deleted.
+**An upstream bump is a `feat!:`.** When upstream Keycloak moves to 25.0.0 the
+developer edits the upstream half by hand and marks the commit `feat!:`.
+release-please takes the major and the tag becomes `25.0.0-2.0.0`. The OKDP half
+does not reset, because `keycloak/v1.0.0` is already a git tag.
 
 **Publishing is triggered by a release, for the released packages only.**
 `release-please.yml` passes `paths_released` to the package template, which
 resolves each released directory to its manifest. `on_existing_tag: fail` is set
-on this path: release-please has just minted versions that never existed, so a
-tag already being present means something is genuinely wrong.
+on this path.
 
 `release-please.yml` also moves from `pull_request: types: [closed]` to
 `push: branches: [main]`, the documented trigger, which additionally covers
 direct pushes.
 
-**The interim tag guard is removed.** `tag-must-move` — the `ci.yml` job and
-`.github/scripts/tag-must-move.sh` — fails a pull request that edits a package
-without bumping its `tag:`. From here on that is what *every* package change
-looks like: the developer must not touch `tag:`, release-please writes it at
-release time. Left in place the guard would block all package work. It was
-labelled interim in both the job comment and the script header; this is the
-handover it was waiting for. The `[no-publish]` escape hatch goes with it.
+**The interim tag guard is removed.** `tag-must-move` (the `ci.yml` job and
+`.github/scripts/tag-must-move.sh`) fails a pull request that edits a package
+without bumping its `tag:`. From here on that is what every package change looks
+like: the developer must not touch `tag:`, the release workflow writes it. Left
+in place the guard would block all package work. It was labelled interim in both
+the job comment and the script header. The `[no-publish]` escape hatch goes with
+it.
 
 **The README stops restating the versions.** The version column is dropped from
-the package table and the example tag is corrected. The manifests are the source
-of truth, and from here on release-please owns them.
+both package tables and the example tag is corrected. The manifests are the
+source of truth. The column is already wrong in five of fourteen rows
+(`external-secrets`, `keycloak`, `kubauth`, `seaweedfs`, `vault`).
+
+**`cnpg-postgresql` is pinned to `18.3.0`.** Its upstream version is `18.3`, two
+segments, which is not valid SemVer in any form and is rejected outright by a
+strict parser. It has been quietly outside the versioning scheme all along.
 
 ## Related Issue
 
-Fixes #<number of the release-please issue — file it first; this repo has no open issues>
+Fixes #<number of the release-please issue: file it first, this repo has no open issues>
 
 ## Type of Change
 
 - [ ] Bug fix
 - [ ] New feature
-- [ ] Documentation update
+- [x] Documentation update
 - [x] Refactor / chore
 - [x] Breaking change
 
-Every published tag changes shape: `keycloak:24.4.11-p16` becomes
-`keycloak:1.0.0`. Existing tags are not deleted, so nothing breaks immediately,
-but consumers stop receiving updates until they are repointed.
-`OKDP/okdp-sandbox` must be updated in two places per package — the `tag:` on
-each Release, and the `versions:` / `default:` entries in
-`spec.context.serviceCatalog`. This needs an announcement, not just a pull
-request.
+**Migration path.** Every published tag changes shape:
+`keycloak:24.4.11-p16` becomes `keycloak:24.4.11-1.0.0`. The upstream half is
+unchanged, so a human reading the tag still sees which Keycloak it is. Existing
+tags are not deleted and nothing breaks immediately, but consumers stop
+receiving updates until they are repointed. `OKDP/okdp-sandbox` must be updated
+in two places per package: the `tag:` on each Release, and the `versions:` /
+`default:` entries in `spec.context.serviceCatalog`. That is tracked in
+`issue-okdp-sandbox-repoint-packages.md` and needs an announcement.
+
+`cnpg-postgresql` additionally changes its upstream half from `18.3` to
+`18.3.0`. The chart is the same; only the string changes.
+
+**One known regression, fixed separately.** In a correct SemVer ordering the
+legacy `-pNN` tags outrank every new tag for the same upstream version, because
+SemVer 2.0.0 rule 11.4.3 ranks numeric prerelease identifiers below alphanumeric
+ones. `24.4.11-p16` therefore stays at the top of the console dropdown until
+upstream moves off `24.4.11`. `OKDP/okdp-control-plane-server` needs the
+three-band sort from PR 7 before the first release cut here.
 
 ## How to Test
 
-1. **The updater touches one line.** After applying, `git diff` on any manifest
-   shows only the `tag:` line. Every manifest has exactly one line starting
-   `tag:` at column zero; nested `tag:` keys are indented and must not move.
+1. **The migration touches one line per manifest.** After applying, `git diff`
+   on any manifest shows only the `tag:` line, with the upstream half intact.
+   Every manifest has exactly one line starting `tag:` at column zero; nested
+   `tag:` keys are indented and must not move.
 
-2. **The awkward versions.** `cnpg-postgresql` (`18.3-p03`), `kubocd-webhooks`
-   (`v0.3.2-p01`) and `kubauth` (`0.3.0-snapshot-p03`) are the ones a naive
-   version regex would mangle. All three are normalised to `1.0.0` by this
-   change, so the updater only ever sees `X.Y.Z` afterwards.
+2. **The four awkward upstream versions.** These are the shapes a naive split
+   would mangle:
 
-3. **The release pull request.** On merge, release-please opens
+   | package | before | after |
+   |---|---|---|
+   | `kubauth` | `0.3.0-snapshot-p03` | `0.3.0-snapshot-1.0.0` |
+   | `kubocd-webhooks` | `v0.3.2-p01` | `v0.3.2-1.0.0` |
+   | `cnpg-postgresql` | `18.3-p03` | `18.3.0-1.0.0` |
+   | `seaweedfs` | `4.17.0-p08` | `4.17.0-1.0.0` |
+
+3. **`kubocd-webhooks` in particular.** Its manifest is `webhooks.yaml`, not
+   `kubocd-webhooks.yaml`. Confirm its `tag:` moves in the release pull request
+   along with the other thirteen. `compose-oci-tag.sh` locates it by grepping
+   for `^modules:`, so the filename should not matter, but this is the package
+   worth checking by eye.
+
+4. **The release pull request.** On merge, release-please opens
    `chore: release main` bumping every package with pending commits, each with a
-   `CHANGELOG.md` and a `tag:` rewrite. Nothing is published yet.
+   `CHANGELOG.md`. The compose step then rewrites each `tag:` line on the same
+   branch, so a reviewer sees `- tag: 24.4.11-1.0.0` / `+ tag: 24.4.11-1.0.1`.
+   Nothing is published yet.
 
-4. **Publishing follows the release.** Merge that pull request; release-please
-   creates the tags — `keycloak/v1.0.1` for a `fix:`, `keycloak/v1.1.0` for a
-   `feat:`, counting up from the `1.0.0` baseline — then publishes **only** the
+5. **Publishing follows the release.** Merge that pull request; release-please
+   creates the git tags (`keycloak/v1.0.1` for a `fix:`, `keycloak/v1.1.0` for a
+   `feat:`, counting up from the `1.0.0` baseline) then publishes only the
    released packages. The job log line `Processing: ...` names them.
 
-5. **The old guard is gone.** Open a pull request editing `keycloak.yaml`
+6. **An upstream bump.** Open a pull request that edits `keycloak.yaml`'s
+   upstream half to a new Keycloak and titles the commit `feat!:`. The release
+   pull request should show `- tag: 24.4.11-1.0.1` / `+ tag: 25.0.0-2.0.0`.
+
+7. **A malformed tag fails loudly.** Set one manifest's `tag:` back to
+   `24.4.11-p16` and push. The compose step must fail the workflow with
+   `tag '24.4.11-p16' has no -X.Y.Z suffix`, not publish something malformed.
+
+8. **The old guard is gone.** Open a pull request editing `keycloak.yaml`
    without touching `tag:`. Before this change `tag-must-move` fails it; after,
    CI is green and the `fix:` or `feat:` title is what decides the version.
-
-6. **`kubocd-webhooks` in particular.** Its manifest is `webhooks.yaml`, so a
-   copy-paste of the `platform-packages` config would silently never update it.
-   Confirm its `tag:` moves in the release pull request along with the others.
 
 ## Checklist
 
@@ -166,241 +233,64 @@ request.
 
 ---
 
+## The `18.3` decision
+
+`cnpg-postgresql` is the only package in either repo whose upstream version is
+not three segments. Verified with the `semver` library: `semver.valid('18.3-p01')`
+returns `null`, and so does `semver.valid('18.3-1.0.0')`. No amount of suffix
+work fixes that; the left half is the problem.
+
+Three options, in order of preference:
+
+1. **Pin it as `18.3.0`.** One character, the chart is unchanged, and every
+   consumer of the tag can parse it. The CloudNativePG Postgres images are
+   published as `18.3`, so the manifest's `description:` should say so. This is
+   what the rest of this document assumes.
+2. **Leave it `18.3` and accept one unparseable tag.** `compose-oci-tag.sh` does
+   not care, because its split regex only looks at the tail. The console's
+   three-band sort keeps unparseable tags rather than dropping them, so the
+   dropdown still works. But it is a known hole that will confuse the next
+   person.
+3. **Drop the package from the scheme.** Not worth it for one string.
+
+Whichever is chosen, say so explicitly in the PR body. This was invisible under
+the old design because every tag was normalised to `1.0.0`, and it is worth
+surfacing now rather than discovering it at the first publish.
+
 ## Making the changes by hand
 
-Six edits, plus one action **before** merging and one after.
+Six edits. Steps 1, 2 and 5 are mechanical; steps 3, 4 and 6 are where the work
+is. The compose script in step 4 is byte-identical to PR 3's.
 
 ### 1. Replace `release-please-config.json`
 
-One block per package. Strict JSON — **no comments**. Note
-`packages/system/kubocd-webhooks` uses `webhooks.yaml`.
+Drop-in file: `generated-sd-release-please-config.json` in this directory,
+**already updated** to the new scheme.
+
+Fourteen components, one per package directory. Each entry is now:
 
 ```json
-{
-  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "separate-pull-requests": false,
-  "include-v-in-tag": true,
-  "draft-pull-request": true,
-  "packages": {
-    "packages/services/seaweedfs": {
-      "component": "seaweedfs",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "seaweedfs.yaml"
-        }
-      ]
-    },
-    "packages/system/cert-manager": {
-      "component": "cert-manager",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "cert-manager.yaml"
-        }
-      ]
-    },
-    "packages/system/cloudnative-pg": {
-      "component": "cloudnative-pg",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "cloudnative-pg.yaml"
-        }
-      ]
-    },
-    "packages/system/cnpg-postgresql": {
-      "component": "cnpg-postgresql",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "cnpg-postgresql.yaml"
-        }
-      ]
-    },
-    "packages/system/coredns-patch": {
-      "component": "coredns-patch",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "coredns-patch.yaml"
-        }
-      ]
-    },
-    "packages/system/dns-server": {
-      "component": "dns-server",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "dns-server.yaml"
-        }
-      ]
-    },
-    "packages/system/external-secrets": {
-      "component": "external-secrets",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "external-secrets.yaml"
-        }
-      ]
-    },
-    "packages/system/ingress-nginx": {
-      "component": "ingress-nginx",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "ingress-nginx.yaml"
-        }
-      ]
-    },
-    "packages/system/keycloak": {
-      "component": "keycloak",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "keycloak.yaml"
-        }
-      ]
-    },
-    "packages/system/kubauth": {
-      "component": "kubauth",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "kubauth.yaml"
-        }
-      ]
-    },
     "packages/system/kubocd-webhooks": {
       "component": "kubocd-webhooks",
       "release-type": "simple",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "webhooks.yaml"
-        }
-      ]
+      "changelog-path": "CHANGELOG.md"
     },
-    "packages/system/local-secrets-provider": {
-      "component": "local-secrets-provider",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "local-secrets-provider.yaml"
-        }
-      ]
-    },
-    "packages/system/tools": {
-      "component": "tools",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "tools.yaml"
-        }
-      ]
-    },
-    "packages/system/vault": {
-      "component": "vault",
-      "release-type": "simple",
-      "include-component-in-tag": true,
-      "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "generic",
-          "path": "vault.yaml"
-        }
-      ]
-    }
-  },
-  "changelog-sections": [
-    {
-      "type": "feat",
-      "section": "Features"
-    },
-    {
-      "type": "fix",
-      "section": "Bug Fixes"
-    },
-    {
-      "type": "docs",
-      "section": "Documentation",
-      "hidden": false
-    },
-    {
-      "type": "refactor",
-      "section": "Refactoring",
-      "hidden": false
-    },
-    {
-      "type": "test",
-      "section": "Tests",
-      "hidden": true
-    },
-    {
-      "type": "ci",
-      "section": "Continuous Integration",
-      "hidden": true
-    }
-  ]
-}
 ```
+
+**The `extra-files` block is gone from all fourteen entries.** That is what lets
+the upstream half survive, and it is also what defuses the `webhooks.yaml` trap:
+nothing in the config names a manifest filename any more.
+
+Also note the old config pointed `extra-files` at `README.md`. That goes too,
+which is consistent with step 6 removing the version table.
+
+The `# x-release-please-version` markers are **not** added to the manifests.
 
 ### 2. Replace `.release-please-manifest.json`
 
-Currently `{}`. This is the scoreboard release-please keeps from here on.
+Currently `{}`. Holds the OKDP half only.
 
 ```json
 {
@@ -421,225 +311,119 @@ Currently `{}`. This is the scoreboard release-please keeps from here on.
 }
 ```
 
-This asserts that every package *has already been released* at `1.0.0`, so the
-first release-please run counts up from there — `1.0.1` or `1.1.0`, never
-`1.0.0` itself. Make the assertion true **before** this merges: see
-**Before merging** below.
+Drop-in file: `generated-sd-release-please-manifest.json`.
 
-### 3. Annotate the fourteen manifests
+### 3. Migrate the fourteen `tag:` lines
 
-In **each** package manifest, replace the `tag:` line:
+Swap the `-pNN` counter for `-1.0.0`, leave the upstream half alone:
 
 ```yaml
 - tag: 24.4.11-p16
-+ tag: 1.0.0 # x-release-please-version
++ tag: 24.4.11-1.0.0
 ```
-
-Set the value *and* add the comment in the same edit. The updater replaces the
-first `X.Y.Z`-looking string on an annotated line, and three current tags don't
-match that shape (`18.3-p03`, `v0.3.2-p01`, `0.3.0-snapshot-p03`). Normalising
-to `1.0.0` avoids it.
-
-The whole set at once. Every manifest has exactly **one** line starting `tag:`
-at column zero — nested `tag:` keys are indented — so a plain substitution is
-safe and needs no line-range address:
 
 ```sh
 for f in packages/*/*/*.yaml; do
   grep -q '^modules:' "$f" || continue
-  sed -i '' 's/^tag: .*/tag: 1.0.0 # x-release-please-version/' "$f"   # drop the '' on Linux
+  sed -i '' -E 's/^(tag: .*)-p[0-9]+$/\1-1.0.0/' "$f"
 done
+# then, separately, the 18.3 decision:
+sed -i '' 's/^tag: 18\.3-1\.0\.0$/tag: 18.3.0-1.0.0/' packages/system/cnpg-postgresql/cnpg-postgresql.yaml
 git diff --stat        # expect 14 files, one line each
+grep -rn '^tag:' packages/ | grep -vE -- '-[0-9]+\.[0-9]+\.[0-9]+$' || echo "all fourteen migrated"
 ```
 
-> Do **not** use the `0,/^tag: /s//.../` form given in `pr-3-release-please.md`.
-> `0,/re/` is a GNU extension; BSD/macOS `sed` accepts it, exits 0, and changes
-> nothing. Verified on this repo — the command ran clean and produced an empty
-> `git diff`.
+Expected result, all fourteen. Read off `origin/main` on 17 Sep 2026; re-read
+the `before` column before applying, since the counters move constantly:
 
-### 4. Teach the package template to publish a subset
+| package | before | after |
+|---|---|---|
+| seaweedfs | `4.17.0-p08` | `4.17.0-1.0.0` |
+| cert-manager | `1.17.1-p08` | `1.17.1-1.0.0` |
+| cloudnative-pg | `1.29.1-p01` | `1.29.1-1.0.0` |
+| cnpg-postgresql | `18.3-p03` | `18.3.0-1.0.0` |
+| coredns-patch | `1.0.0-p05` | `1.0.0-1.0.0` |
+| dns-server | `1.0.0-p04` | `1.0.0-1.0.0` |
+| external-secrets | `0.15.1-p03` | `0.15.1-1.0.0` |
+| ingress-nginx | `4.12.1-p03` | `4.12.1-1.0.0` |
+| keycloak | `24.4.11-p16` | `24.4.11-1.0.0` |
+| kubauth | `0.3.0-snapshot-p03` | `0.3.0-snapshot-1.0.0` |
+| kubocd-webhooks | `v0.3.2-p01` | `v0.3.2-1.0.0` |
+| local-secrets-provider | `1.0.0-p06` | `1.0.0-1.0.0` |
+| tools | `1.0.0-p01` | `1.0.0-1.0.0` |
+| vault | `0.29.1-p03` | `0.29.1-1.0.0` |
 
-In `.github/workflows/kubocd-package-template.yml`, add an input directly after
-`on_existing_tag`:
+`kubauth` and `kubocd-webhooks` are the ones to eyeball: `0.3.0-snapshot` and
+the leading `v` must survive intact. `coredns-patch`, `dns-server`,
+`local-secrets-provider` and `tools` all land on `1.0.0-1.0.0`, which looks odd
+but is correct: their upstream version genuinely is `1.0.0`.
 
-```yaml
-      package_paths:
-        description: >-
-          JSON array of package directories to process, as emitted by
-          release-please's paths_released output. Empty or "[]" means every
-          package under packages/.
-        required: false
-        type: string
-        default: ""
+Note the four manifests whose `tag:` is not on line 19 (`local-secrets-provider`
+line 23, `cnpg-postgresql` line 23, `kubauth` line 27, `keycloak` line 21,
+`external-secrets` line 22, `vault` line 22, `seaweedfs` line 20). The `sed`
+above is anchored on `^tag:` rather than a line number, so this does not matter,
+but it rules out a line-based patch.
+
+### 4. Add `.github/scripts/compose-oci-tag.sh`
+
+Byte-identical to PR 3 step 4. Copy it rather than retyping it: the two repos'
+workflows are already effectively identical, and divergence here would be a
+latent bug.
+
+```sh
+cp ../platform-packages/.github/scripts/compose-oci-tag.sh .github/scripts/
+chmod +x .github/scripts/compose-oci-tag.sh
+diff .github/scripts/compose-oci-tag.sh ../platform-packages/.github/scripts/compose-oci-tag.sh && echo identical
 ```
 
-then replace the whole **Find KuboCD packages** step with:
+It finds each package's manifest by grepping for `^modules:`, which is why
+`webhooks.yaml` needs no special case.
+
+### 5. Teach the package template to publish a subset
+
+Identical to PR 3 step 5. The two repos' `kubocd-package-template.yml` differ
+only in the `oci_package_prefix` description, one punctuation mark, and the
+position of the `Install yq` and `Install oras` steps. The **Find KuboCD
+packages** step is byte-identical, so the replacement block applies unchanged.
+
+### 6. Replace `release-please.yml`, remove the guard, fix the README
+
+**`release-please.yml`:** identical to PR 3 step 6, including the
+`Compose the OCI tags` step, with one change:
 
 ```yaml
-      - name: Find KuboCD packages 🔎
-        env:
-          PACKAGE_PATHS: ${{ inputs.package_paths }}
-        run: |
-          set -uo pipefail
-
-          if [[ -n "${PACKAGE_PATHS}" && "${PACKAGE_PATHS}" != "[]" ]]; then
-            # A release published only some packages: resolve each released
-            # directory to the manifest it contains.
-            KUBOCD_PACKAGES=""
-            for dir in $(jq -r '.[]' <<<"${PACKAGE_PATHS}")
-            do
-              manifest=$(find "${dir}" -maxdepth 1 -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l '^modules:' {} \;)
-              if [[ -z "${manifest}" ]]; then
-                echo "::error title=No package manifest::${dir} was released but holds no manifest with 'modules:'"
-                exit 1
-              fi
-              KUBOCD_PACKAGES="${KUBOCD_PACKAGES} ${manifest}"
-            done
-            KUBOCD_PACKAGES="${KUBOCD_PACKAGES# }"
-          else
-            KUBOCD_PACKAGES=$(find packages -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l '^modules:' {} \; | tr '\n' ' ')
-          fi
-
-          echo "Processing: ${KUBOCD_PACKAGES}"
-          echo "KUBOCD_PACKAGES=${KUBOCD_PACKAGES}" >> $GITHUB_ENV
-```
-
-The step being replaced is byte-identical to `platform-packages`', but it sits
-at a **different position** in this file: here `Install yq 🛠️` and
-`Install oras 🛠️` come *after* it, where in `platform-packages` they come
-before. Anchor on the step name, not on a line number. `PACKAGE_PATHS` is passed
-through `env:` rather than interpolated into the script, so the JSON's quotes
-cannot break the shell.
-
-Because this manifest resolution is a `find` over the released directory rather
-than a name guess, `kubocd-webhooks/webhooks.yaml` needs no special case here.
-
-### 5. Replace `release-please.yml`
-
-Identical to `platform-packages` except `values_path`. The current file is
-byte-identical between the two repos, so this replaces it wholesale.
-
-```yaml
-#
-# Copyright 2025 The OKDP Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-
-name: release-please
-
-# Every push to main is a candidate: release-please keeps one release pull
-# request up to date, and cutting the release is merging that pull request.
-on:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: write
-  pull-requests: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
-jobs:
-
-  release-please:
-    runs-on: ubuntu-latest
-    if: github.repository_owner == 'OKDP'
-    outputs:
-      # JSON array of the package directories released by this run, "[]" when
-      # this push only updated the release pull request.
-      paths_released: ${{ steps.release-please.outputs.paths_released }}
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: release-please
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-  get-package-oci-prefix:
-    needs: [release-please]
-    if: needs.release-please.outputs.paths_released != '[]'
-    runs-on: ubuntu-latest
-    outputs:
-      oci_package_prefix: ${{ steps.prefix.outputs.oci_package_prefix }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Get OCI package prefix
-        id: prefix
-        uses: ./.github/actions/oci-package-prefix
-        with:
           values_path: sandbox-dependencies-values.yaml
-
-  publish:
-    needs: [release-please, get-package-oci-prefix]
-    if: needs.release-please.outputs.paths_released != '[]'
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/kubocd-package-template.yml
-    with:
-      ci_registry: "ghcr.io"
-      registry: "quay.io"
-      publish_to_registry: "true"
-      # release-please has just minted versions that have never existed, so a
-      # tag already being on the registry means something is genuinely wrong.
-      on_existing_tag: "fail"
-      package_paths: ${{ needs.release-please.outputs.paths_released }}
-      oci_package_prefix: "${{ needs.get-package-oci-prefix.outputs.oci_package_prefix }}"
-      runs-on: "ubuntu-latest"
-    secrets: inherit
 ```
 
-Note `values_path: sandbox-dependencies-values.yaml` — the one line that differs
-from PR 3. `packageRepository` there is `quay.io/okdp/sandbox-dependencies`, so
-the OCI prefix resolves to `sandbox-dependencies`.
+The two files are byte-identical on `main` today, so they should stay so.
 
-### 6. Remove the interim tag guard, and stop restating versions in the README
+**`.github/workflows/ci.yml`:** delete the first job, lines 60 to 77 as `main`
+stands today (the same range as `platform-packages`): the three comment lines
+under `jobs:` through the `bash .github/scripts/tag-must-move.sh ...` line.
+`get-package-oci-prefix:` becomes the first job and `kubocd-packages-ci` is
+untouched. Unlike PR 3, nothing takes the vacated slot, because this repo has no
+`charts/`. `ci.yml` ends with two jobs.
 
-**`.github/workflows/ci.yml` — keep the file, delete the first job.** Lines
-60–77 as `main` stands today (the same line range as `platform-packages`): the
-three comment lines under `jobs:` through the
-`bash .github/scripts/tag-must-move.sh ...` line. `get-package-oci-prefix:`
-becomes the first job, and `kubocd-packages-ci` is untouched.
-
-Unlike PR 3, nothing takes the vacated slot — this repo has no `charts/`, so
-there is no shared-chart guard to add. `ci.yml` ends with two jobs.
-
-**`.github/scripts/tag-must-move.sh` — delete the whole file.**
+**`.github/scripts/tag-must-move.sh`:** delete the whole file.
 
 ```sh
 git rm .github/scripts/tag-must-move.sh
 grep -rn tag-must-move .github/ || echo "guard removed"
 ```
 
-The `[no-publish]` escape hatch in the pull-request body disappears with it.
-Worth a line in the announcement, since reviewers have been told to use it.
+The `[no-publish]` escape hatch disappears with it. Worth a line in the
+announcement, since reviewers have been told to use it.
 
-**`README.md` — three corrections.** All three are made wrong by this change,
-and fixing them is what lets the "Documentation updated if needed" box be ticked.
+**`README.md`, three corrections.** All three are made wrong by this change, and
+fixing them is what lets the "Documentation updated if needed" box be ticked.
 
-- **Drop the version column** from both package tables (system and services).
-  It is a hand-maintained copy that already disagrees with the manifests in five
-  of fourteen rows, and once release-please owns the versions it would drift on
-  every release. The manifests are the source of truth.
-- **Fix the example** at the "Example:" line —
+- **Drop the version column** from both package tables. It already disagrees
+  with the manifests in five of fourteen rows, and once release-please owns the
+  OKDP half it would drift on every release. The manifests are the source of
+  truth.
+- **Fix the example** at the "Example:" line.
   `quay.io/okdp/sandbox-dependencies/seaweedfs:4.17.0-p07` is both stale and in
-  the format this pull request abolishes. Make it `seaweedfs:1.0.0`.
+  the format this pull request abolishes. Make it `seaweedfs:4.17.0-1.0.0`.
 - **Fix the Release Publishing paragraph.** It still references
   `publish-on-merge.yml`, which #32 deleted, and says release-please *triggers*
   `publish.yml`. Neither is true after this change. Suggested replacement:
@@ -648,36 +432,38 @@ and fixing them is what lets the "Documentation updated if needed" box be ticked
   > and publishes every package to Quay using `REGISTRY_USERNAME` and
   > `REGISTRY_ROBOT_TOKEN`. [`release-please.yml`](./.github/workflows/release-please.yml)
   > runs on every push to `main`; when merging its release pull request creates
-  > releases, it publishes **only the released packages**.
+  > releases, it publishes only the released packages.
 
-Also drop `"extra-files": ["README.md"]` — it is gone already, since step 1
-replaces the whole config, but it is worth knowing that the old config was
-pointing release-please at the README.
+  Consider also documenting the tag shape here, since this README is where
+  someone will look: the published tag is `<upstream version>-<OKDP version>`,
+  the upstream half is maintained by hand, and the OKDP half is
+  release-please's.
 
 ### Check your work
 
 ```sh
 python3 -c "import json;[json.load(open(f)) for f in ['release-please-config.json','.release-please-manifest.json']];print('json ok')"
 for f in .github/workflows/*.yml; do python3 -c "import yaml;yaml.safe_load(open('$f'))" || echo "BAD $f"; done
+bash -n .github/scripts/compose-oci-tag.sh
 grep -rn tag-must-move .github/ || echo "guard removed"
+grep -rn 'x-release-please-version' . || echo "no stale annotations"
+grep -rn extra-files release-please-config.json || echo "no extra-files"
+grep -rn '^tag:' packages/ | grep -vE -- '-[0-9]+\.[0-9]+\.[0-9]+$' || echo "all tags composite"
+# the trap: confirm kubocd-webhooks is reachable by content, not by filename
+grep -l '^modules:' packages/system/kubocd-webhooks/*.yaml
+jq -r 'keys[]' .release-please-manifest.json | wc -l     # expect 14
 git diff --stat        # expect 20 files, incl. the deleted tag-must-move.sh
-# the trap: kubocd-webhooks must be wired to webhooks.yaml
-python3 -c "import json;print(json.load(open('release-please-config.json'))['packages']['packages/system/kubocd-webhooks']['extra-files'])"
 ```
 
 ---
 
 ## Before merging: create the fourteen baseline tags
 
-**This must happen before the merge, not after.** `release-please.yml` fires on
-push to `main`, so the first run starts the instant this merges — it completed in
-about 15 seconds in a fork dry-run. With no tags present, release-please has no
-scan floor: it reads every commit in each package's history and opens a release
-pull request whose changelogs cover the entire repository. Tagging afterwards is
-too late; the bogus release pull request already exists.
-
-Git tags are independent of this pull request, so create them on `main` as it
-stands today:
+Same reasoning as PR 3, and it has not been done on this repo yet.
+`release-please.yml` fires on push to `main`, so the first run starts the
+instant this merges. With no tags present release-please has no scan floor: it
+reads every commit in each package's history and opens a release pull request
+whose changelogs cover the entire repository.
 
 ```sh
 git fetch origin
@@ -691,67 +477,75 @@ done
 git ls-remote --tags origin | wc -l        # expect 14
 ```
 
-This creates lightweight git tags and nothing else: no GitHub Releases, no
-workflow runs (`release-please.yml` and `ci.yml` both trigger on branches, not
-tags), no publishes. Reversible with `git push origin :refs/tags/<name>`.
+Lightweight git tags and nothing else: no Releases, no workflow runs, no
+publishes. Reversible with `git push origin :refs/tags/<name>`.
 
-Verified in a `platform-packages` fork: with the tags in place the first
-release-please run after the merge logged `No user facing commits found since
-<sha>` once per component and opened no release pull request. Without them it
-would have opened one covering all of history.
+Note the git tag is `keycloak/v1.0.0`, the OKDP half only. The OCI tag is
+`24.4.11-1.0.0`.
 
-Any `fix:`/`feat:` that lands on `main` between tagging and merging will
-legitimately appear in the first release pull request. That is correct
-behaviour, just something to expect.
+**Also close release PR #2 before this merges.** It proposes a repo-wide version
+that means nothing under the new scheme.
 
 ## After merging: publish the baseline once
 
-The manifest and the git tags now agree, but the registry still has no `1.0.0`
-for any package, so `main` declares a `tag:` the registry does not have.
+The registry has no composite tag for any package, so `main` declares a `tag:`
+the registry does not have.
 
 Actions → **publish** → Run workflow. It calls the template without
-`on_existing_tag`, which defaults to `skip` — right for this run, since none of
-the fourteen `1.0.0` tags exist yet. Expect fourteen `build and push` and no
-skips.
-
-The manifest, the git tags, the registry and the `tag:` lines then all agree.
+`on_existing_tag`, which defaults to `skip`. None of the fourteen composite tags
+exist yet, so expect fourteen `build and push` and no skips.
 
 ---
 
-## Verified before writing this
+## Verified
 
-Against `OKDP/sandbox-dependencies` at `12bb63a`, not inferred from PR 3:
+### Against `OKDP/sandbox-dependencies` at `12bb63a`
 
-- **Fourteen** package manifests, at the paths in step 1. Zero git tags.
+- **Fourteen** package manifests at the paths in step 2. Zero git tags.
   `.release-please-manifest.json` is `{}`; `release-please-config.json` is the
   root-package `initial-version: 0.3.0` shape. Release PR **#2** open since
   24 July. The repo has **no open issues**, so the `Fixes #` number must be
   filed first.
 - **No `charts/` directory**, and `grep -rn "path: \.\./" packages/` returns
-  nothing — no package embeds a local chart by relative path. PR 3's step 7 is
-  correctly omitted.
+  nothing. PR 3's shared-chart guard is correctly omitted.
 - `kubocd-webhooks` is the only package whose manifest filename differs from its
-  directory name (`webhooks.yaml`). Every manifest's `name:` matches its
-  directory, so components are the directory names.
+  directory name. Every manifest's `name:` matches its directory, so components
+  are the directory names.
 - Workflows compared file by file against `platform-packages@main`:
-  `release-please.yml` and `tag-must-move.sh` are **byte-identical**; `ci.yml`
-  and `publish.yml` differ only in `values_path`;
-  `kubocd-package-template.yml` differs only in the `oci_package_prefix`
-  description, one comma/semicolon, and the **position** of the `Install yq` and
-  `Install oras` steps. `on_existing_tag` and the `rc=0; out=$(...)` fix are
-  both present. `ci.yml`'s `tag-must-move` job is at lines 60–77, the same range
-  as in `platform-packages`.
+  `release-please.yml` and `tag-must-move.sh` are byte-identical; `ci.yml` and
+  `publish.yml` differ only in `values_path`; `kubocd-package-template.yml`
+  differs only in the `oci_package_prefix` description, one punctuation mark,
+  and the position of the `Install yq` and `Install oras` steps.
+  `on_existing_tag` and the `rc=0; out=$(...)` fix are both present. `ci.yml`'s
+  `tag-must-move` job is at lines 60 to 77, the same range as in
+  `platform-packages`.
 - The README table was diffed against the manifests: five of fourteen rows are
   stale (`external-secrets`, `keycloak`, `kubauth`, `seaweedfs`, `vault`).
-- Every manifest has exactly one `^tag:` line at column zero, so the plain
-  substitution in step 3 is safe. The `0,/re/` form from PR 3 was run against
-  this repo and changed nothing.
-- Both generated JSON files parse.
+- Every manifest has exactly one `^tag:` line at column zero.
+
+### Against release-please 17.11.2 and the real tags, 17 Sep 2026
+
+- The two candidate release-please configurations both fail. See
+  `pr-3-release-please.md`, **Evidence**.
+- All fourteen of this repo's tags migrate cleanly under the step 3 `sed`, and
+  all fourteen split correctly afterwards under
+  `^(.+)-([0-9]+\.[0-9]+\.[0-9]+)$`, including `0.3.0-snapshot-1.0.0` and
+  `v0.3.2-1.0.0`.
+- `compose-oci-tag.sh` was exercised against four packages including
+  `1.3.0-incubating-1.0.0`, a manifest still on `-p07`, and a directory with no
+  manifest. It rewrote the valid ones, reported both failures as GitHub
+  annotations, exited 1, and was silent and clean on a rerun.
+- `semver.valid('18.3-1.0.0')` is `null`. Hence **The `18.3` decision**.
+
+**Still untested:** `on_existing_tag: "fail"` (needs real quay credentials), and
+the compose step on a real runner. Unlike PR 3, this repo has had no fork
+dry-run at all, so consider one before merging.
 
 ## Not in this PR
 
+- **A guard on the upstream half.** The natural successor to `tag-must-move`:
+  fail a pull request that edits the upstream half of a `tag:` without a
+  `feat!:` commit. Its own issue.
 - Repointing `OKDP/okdp-sandbox`. Separate, and it needs the announcement.
-- The automated bump PR into `okdp-sandbox` — needs a machine account, since
-  `GITHUB_TOKEN` cannot write to another repository.
-- Closing release PR **#2**. Do it before this merges; it means nothing under
-  the new scheme.
+- The automated bump PR into `okdp-sandbox`, which needs a machine account.
+- Closing release PR **#2**. Do it before this merges.
