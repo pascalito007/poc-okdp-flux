@@ -27,3 +27,17 @@ kubectl --context kind-okdp-full delete pod apk-test apk-proxy apk-ip apk-ip2 dn
 sed 's#REPLACE_WITH_GIT_REPO#git://okdp-git.okdp-git.svc/okdp-gitops#' out/int-hub/argocd/root-application.yaml | kubectl --context kind-okdp-full apply -f -
 
 kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.items[] | "\(.metadata.name): \(.status.sync.status) / \(.status.health.status) \(.status.conditions[0].message // "")"'
+
+----
+
+curl -sv -o /dev/null -m 10 https://github.com 2>&1 | grep -E 'issuer:|verify|HTTP/'
+
+kubectl --context kind-okdp-full -n argocd create configmap okdp-ca-bundle --from-file=ca-certificates.crt=/etc/ssl/certs/ca-certificates.crt
+
+kubectl --context kind-okdp-full -n argocd patch deploy argocd-repo-server --type=json -p='[{"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"okdp-ca","configMap":{"name":"okdp-ca-bundle"}}},{"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"okdp-ca","mountPath":"/etc/okdp-ca","readOnly":true}},{"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"SSL_CERT_FILE","value":"/etc/okdp-ca/ca-certificates.crt"}}]'
+
+kubectl --context kind-okdp-full -n argocd rollout status deploy/argocd-repo-server --timeout=180s
+
+kubectl --context kind-okdp-full -n argocd annotate applications --all argocd.argoproj.io/refresh=hard --overwrite
+
+kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.items[] | [.metadata.name, .status.sync.status, .status.health.status, (.status.conditions[0].message // "-")] | @tsv'
