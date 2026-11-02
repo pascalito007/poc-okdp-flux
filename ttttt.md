@@ -23,3 +23,8 @@ kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.it
 
 
 kubectl --context kind-okdp-full delete pod apk-test apk-proxy apk-ip apk-ip2 dns-test --ignore-not-found
+
+
+sed 's#REPLACE_WITH_GIT_REPO#git://okdp-git.okdp-git.svc/okdp-gitops#' out/int-hub/argocd/root-application.yaml | kubectl --context kind-okdp-full apply -f -
+
+kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.items[] | "\(.metadata.name): \(.status.sync.status) / \(.status.health.status) \(.status.conditions[0].message // "")"'
