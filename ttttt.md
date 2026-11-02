@@ -19,8 +19,7 @@ kubectl --context kind-okdp-full -n argocd annotate application b-tenant-root ar
 
 kubectl --context kind-okdp-full -n argocd get applications -w
 
-kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.items[] | "\(.metadata.name): \(.status.sync.status) / \(.status.health.status) \(.status.conditions[0].message // "")"'
-
+kubectl --context kind-okdp-full -n argocd get applications -o json | jq -r '.items[] | [.metadata.name, .status.sync.status, .status.health.status, (.status.conditions[0].message // "-")] | @tsv'
 
 kubectl --context kind-okdp-full delete pod apk-test apk-proxy apk-ip apk-ip2 dns-test --ignore-not-found
 
