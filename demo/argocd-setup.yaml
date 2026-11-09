@@ -1,0 +1,23 @@
+# Demo-only Argo CD wiring: where the generated artefacts and the OKDP provisioner charts live.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-okdp-charts
+  namespace: argocd
+  labels: { argocd.argoproj.io/secret-type: repository }
+stringData:
+  type: helm
+  name: okdp-charts
+  url: kind-registry:5000/okdp
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-okdp-gitops
+  namespace: argocd
+  labels: { argocd.argoproj.io/secret-type: repository }
+stringData:
+  type: git
+  url: git://okdp-git.okdp-git.svc/okdp-gitops
